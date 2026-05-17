@@ -437,7 +437,7 @@
   function drawSky(currentState) {
     sctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
     if (heading === null) return;
-    const pitchUp = 90 - pitch;
+    const pitchUp = pitch - 90;
 
     // Past trail — fading teal line
     drawTrail(pastTrail, heading, pitchUp, { fade: true, width: 2.5 });
@@ -628,8 +628,8 @@
         const dAz = shortestAngle(s.azDeg - heading);
 
         // Approx pitch of device pointing: when phone is upright (beta ~ 90) it's pointing horizon;
-        // tilt back toward sky reduces beta below 90 (or above for some orientations).
-        const devicePitchDeg = 90 - pitch;       // 0 = horizon, +90 = straight up
+        // tilting the top edge of the phone back (camera toward sky) makes beta > 90.
+        const devicePitchDeg = pitch - 90;       // 0 = horizon, +90 = straight up
         const dEl = s.elDeg - devicePitchDeg;
 
         // Rough camera FOV (most phones ~60° horizontal, ~45° vertical when in portrait)
