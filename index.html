@@ -58,8 +58,35 @@
   #startBtn:active { transform: scale(0.97); }
   #startErr {
     margin-top: 16px; color: #ff6b6b; font-size: 13px; min-height: 18px;
-    max-width: 320px;
+    max-width: 340px;
+    line-height: 1.45; text-align: left;
   }
+  #startErr b { color: #ffb84d; }
+  #startErr ol { padding-left: 18px; margin: 8px 0 0; }
+  #startErr li { margin: 2px 0; }
+  .fallback {
+    margin-top: 14px;
+    display: flex; flex-direction: column; gap: 8px;
+    width: 100%; max-width: 320px;
+  }
+  .fallback button {
+    appearance: none; border: 1px solid rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.08);
+    color: #fff; font-size: 14px; font-weight: 500;
+    padding: 12px 16px; border-radius: 10px;
+    cursor: pointer;
+  }
+  .fallback button:active { transform: scale(0.98); }
+  .fallback input {
+    appearance: none; border: 1px solid rgba(255,255,255,0.25);
+    background: rgba(0,0,0,0.4);
+    color: #fff; font-size: 14px;
+    padding: 12px 14px; border-radius: 10px;
+    width: 100%; box-sizing: border-box;
+    text-align: center; font-variant-numeric: tabular-nums;
+  }
+  .fallback .row2 { display: flex; gap: 8px; }
+  .fallback .row2 input { flex: 1; }
 
   /* Top status panel */
   #top {
@@ -211,6 +238,14 @@
   <p>Point your phone at the sky. The arrow guides you to the International Space Station — when it's in frame, a target ring locks on.</p>
   <button id="startBtn">Start AR Tracking</button>
   <div id="startErr"></div>
+  <div id="fallback" class="fallback hidden">
+    <button id="useIpBtn">📍 Use approximate location (IP-based)</button>
+    <div class="row2">
+      <input id="latIn" type="text" inputmode="decimal" placeholder="Latitude" />
+      <input id="lonIn" type="text" inputmode="decimal" placeholder="Longitude" />
+    </div>
+    <button id="useManualBtn">Use entered coordinates</button>
+  </div>
   <p style="font-size:12px; opacity:0.55; margin-top:24px;">
     Needs camera, location, and motion access. Best viewed full-screen on iPhone in Safari.
   </p>
@@ -283,31 +318,82 @@
     await video.play().catch(() => {});
   }
 
-  function getLocation() {
+  // Geolocation error codes:
+  //   1 = PERMISSION_DENIED, 2 = POSITION_UNAVAILABLE, 3 = TIMEOUT
+  function getBrowserLocation() {
     return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) return reject(new Error('Geolocation not supported'));
+      if (!navigator.geolocation) {
+        const e = new Error('Geolocation not supported by this browser.');
+        e.code = 2;
+        return reject(e);
+      }
       navigator.geolocation.getCurrentPosition(
-        (pos) => resolve({
-          lat: pos.coords.latitude,
-          lon: pos.coords.longitude,
-          altKm: (pos.coords.altitude || 0) / 1000
-        }),
-        (err) => reject(new Error('Location: ' + err.message)),
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
-      );
-      // Keep tracking
-      navigator.geolocation.watchPosition(
         (pos) => {
-          observer = {
+          const loc = {
             lat: pos.coords.latitude,
             lon: pos.coords.longitude,
-            altKm: (pos.coords.altitude || 0) / 1000
+            altKm: (pos.coords.altitude || 0) / 1000,
+            source: 'gps'
           };
+          // Also start a watcher to keep observer fresh
+          try {
+            navigator.geolocation.watchPosition(
+              (p) => {
+                observer = {
+                  lat: p.coords.latitude,
+                  lon: p.coords.longitude,
+                  altKm: (p.coords.altitude || 0) / 1000,
+                  source: 'gps'
+                };
+              },
+              () => {},
+              { enableHighAccuracy: true, maximumAge: 5000 }
+            );
+          } catch (_) { /* ignore */ }
+          resolve(loc);
         },
-        () => {},
-        { enableHighAccuracy: true, maximumAge: 5000 }
+        (err) => {
+          const e = new Error(err.message || 'Location error');
+          e.code = err.code;
+          reject(e);
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
       );
     });
+  }
+
+  async function getIpLocation() {
+    // ipapi.co supports CORS over HTTPS and returns JSON with lat/lon
+    const tryUrls = [
+      'https://ipapi.co/json/',
+      'https://ipwho.is/'
+    ];
+    for (const url of tryUrls) {
+      try {
+        const r = await fetch(url, { cache: 'no-cache' });
+        if (!r.ok) continue;
+        const j = await r.json();
+        const lat = j.latitude ?? j.lat;
+        const lon = j.longitude ?? j.lon;
+        if (typeof lat === 'number' && typeof lon === 'number') {
+          return { lat, lon, altKm: 0, source: 'ip' };
+        }
+      } catch (_) { /* try next */ }
+    }
+    throw new Error('IP location lookup failed.');
+  }
+
+  function deniedHelpHtml() {
+    return (
+      '<b>Location permission denied.</b><br/>' +
+      'On iPhone, to re-enable:' +
+      '<ol>' +
+        '<li>Tap the <b>AA</b> button in the Safari address bar → <b>Website Settings</b> → set <b>Location</b> to <b>Allow</b>.</li>' +
+        '<li>If still blocked: <b>Settings → Privacy &amp; Security → Location Services → Safari Websites → While Using the App</b>.</li>' +
+        '<li>Then reload this page and tap Start again.</li>' +
+      '</ol>' +
+      'Or use an approximate location below.'
+    );
   }
 
   // --- TLE fetch + satellite.js setup ---------------------------------------
@@ -536,30 +622,108 @@
   }
 
   // --- Boot -----------------------------------------------------------------
+  const fallbackEl = $('fallback');
+  const useIpBtn   = $('useIpBtn');
+  const useManualBtn = $('useManualBtn');
+  const latIn = $('latIn'), lonIn = $('lonIn');
+
+  let cameraReady = false, orientationReady = false;
+
+  async function ensurePerms() {
+    if (!orientationReady) {
+      await requestOrientationPerm();
+      orientationReady = true;
+    }
+    if (!cameraReady) {
+      await startCamera();
+      cameraReady = true;
+    }
+  }
+
+  async function finishStart(obs) {
+    observer = obs;
+    setStatus('Loading orbit data…');
+    await fetchTLE();
+    setStatus(
+      obs.source === 'ip' ? 'Tracking (approx. location)' :
+      obs.source === 'manual' ? 'Tracking (manual location)' :
+      'Tracking ISS'
+    );
+    if (obs.source !== 'gps') statusPill.classList.add('warn');
+
+    window.addEventListener('deviceorientation', handleOrientation, true);
+    window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+
+    startEl.classList.add('hidden');
+    requestAnimationFrame(render);
+  }
+
+  function showFallbackUi(htmlMsg) {
+    startErr.innerHTML = htmlMsg;
+    fallbackEl.classList.remove('hidden');
+    startBtn.disabled = false;
+    startBtn.textContent = 'Try Location Again';
+  }
+
   startBtn.addEventListener('click', async () => {
     startBtn.disabled = true;
     startBtn.textContent = 'Loading…';
-    showErr('');
+    startErr.innerHTML = '';
     try {
-      await requestOrientationPerm();
-      await startCamera();
+      await ensurePerms();
       setStatus('Getting location…');
-      observer = await getLocation();
-      setStatus('Loading orbit data…');
-      await fetchTLE();
-      setStatus('Tracking ISS');
-
-      window.addEventListener('deviceorientation', handleOrientation, true);
-      // Some iOS need the absolute variant
-      window.addEventListener('deviceorientationabsolute', handleOrientation, true);
-
-      startEl.classList.add('hidden');
-      requestAnimationFrame(render);
+      const loc = await getBrowserLocation();
+      await finishStart(loc);
     } catch (e) {
-      startBtn.disabled = false;
-      startBtn.textContent = 'Try Again';
+      const code = e && e.code;
+      if (code === 1) {
+        // Permission denied — show iOS instructions + fallback options
+        showFallbackUi(deniedHelpHtml());
+        setStatus('Location blocked', 'err');
+      } else if (code === 3) {
+        showFallbackUi('<b>Location timed out.</b> Move to an open area or use a fallback below.');
+        setStatus('Location timeout', 'warn');
+      } else if (code === 2) {
+        showFallbackUi('<b>Location unavailable.</b> Use a fallback below.');
+        setStatus('Location unavailable', 'warn');
+      } else {
+        startBtn.disabled = false;
+        startBtn.textContent = 'Try Again';
+        showErr(e.message || String(e));
+        setStatus('Error', 'err');
+      }
+    }
+  });
+
+  useIpBtn.addEventListener('click', async () => {
+    useIpBtn.disabled = true;
+    useIpBtn.textContent = 'Looking up…';
+    try {
+      await ensurePerms();
+      const loc = await getIpLocation();
+      await finishStart(loc);
+    } catch (e) {
+      useIpBtn.disabled = false;
+      useIpBtn.textContent = '📍 Use approximate location (IP-based)';
       showErr(e.message || String(e));
-      setStatus('Error', 'err');
+    }
+  });
+
+  useManualBtn.addEventListener('click', async () => {
+    const lat = parseFloat(latIn.value), lon = parseFloat(lonIn.value);
+    if (!isFinite(lat) || !isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      showErr('Enter valid latitude (-90 to 90) and longitude (-180 to 180).');
+      return;
+    }
+    useManualBtn.disabled = true;
+    useManualBtn.textContent = 'Loading…';
+    try {
+      await ensurePerms();
+      await finishStart({ lat, lon, altKm: 0, source: 'manual' });
+    } catch (e) {
+      useManualBtn.disabled = false;
+      useManualBtn.textContent = 'Use entered coordinates';
+      showErr(e.message || String(e));
     }
   });
 })();
