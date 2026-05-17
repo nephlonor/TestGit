@@ -336,9 +336,11 @@
   window.addEventListener('orientationchange', resizeSky);
   resizeSky();
 
-  // Pinhole-camera projection from (az, el) → screen pixels given device pose.
-  // Returns {x, y} or null if the point is behind the camera.
-  function projectAzEl(azDeg, elDeg, headingDeg, pitchUpDeg) {
+  // Pinhole-camera projection from (az, el) → screen-space deltas given device pose.
+  // Returns { dR, dU, dF, x, y } or null if heading is unknown.
+  //   dR / dU / dF : world vector dotted with camera right / up / forward
+  //   x, y         : pinhole projection in CSS pixels (only meaningful when dF > 0)
+  function cameraDeltas(azDeg, elDeg, headingDeg, pitchUpDeg) {
     if (headingDeg === null || headingDeg === undefined) return null;
     const azR = azDeg * RAD, elR = elDeg * RAD;
     // World vector in ENU-ish frame (x=east, y=north, z=up)
@@ -359,19 +361,31 @@
     const uy = rz * fx - rx * fz;
     const uz = rx * fy - ry * fx;
     const dF = vx*fx + vy*fy + vz*fz;
-    if (dF < 0.05) return null;
     const dR = vx*rx + vy*ry + vz*rz;
     const dU = vx*ux + vy*uy + vz*uz;
     const W = window.innerWidth, H = window.innerHeight;
     const FOV_H = 60 * RAD;
     const focal = (W / 2) / Math.tan(FOV_H / 2);
-    return { x: W / 2 + (dR / dF) * focal, y: H / 2 - (dU / dF) * focal };
+    const safeF = dF > 0.001 ? dF : 0.001;
+    return {
+      dR, dU, dF,
+      x: W / 2 + (dR / safeF) * focal,
+      y: H / 2 - (dU / safeF) * focal
+    };
+  }
+
+  // Convenience wrapper that returns just {x, y} if the point is in front of camera.
+  function projectAzEl(azDeg, elDeg, headingDeg, pitchUpDeg) {
+    const d = cameraDeltas(azDeg, elDeg, headingDeg, pitchUpDeg);
+    if (!d || d.dF < 0.05) return null;
+    return { x: d.x, y: d.y };
   }
 
   // Trail state — recomputed periodically
   let pastTrail = [];        // last ~30 min of (az, el)
   let futureTrail = [];      // next visible pass (az, el)
   let lastPass = null;       // cached findNextPass() result
+  let peakPoint = null;      // {az, el, time} of next-pass peak
   let trailRecalcAt = 0;
   let lastTrailHead = null;  // {az, el} for current marker
 
@@ -386,6 +400,7 @@
     if (pastTrail.length) lastTrailHead = pastTrail[pastTrail.length - 1];
 
     futureTrail = [];
+    peakPoint = null;
     if (lastPass) {
       const start = Math.max(lastPass.riseT.getTime(), t0);
       const end   = lastPass.setT.getTime();
@@ -394,6 +409,14 @@
           const s = computeIssState(new Date(t));
           if (s) futureTrail.push({ az: s.azDeg, el: s.elDeg });
         }
+      }
+      const peakState = computeIssState(lastPass.maxT);
+      if (peakState) {
+        peakPoint = {
+          az: peakState.azDeg,
+          el: peakState.elDeg,
+          time: lastPass.maxT
+        };
       }
     }
   }
@@ -460,6 +483,39 @@
         sctx.fillStyle = 'rgba(255,184,77,1)';
         sctx.fillText(idx === 0 ? 'RISE' : 'SET', p.x + 8, p.y - 6);
       });
+
+      // Peak marker — drawn at the highest point with the local arrival time.
+      // Hidden when the live ISS is close (in time) to that peak.
+      if (peakPoint) {
+        const closeMs = 90 * 1000;
+        const dtPeak = Math.abs(Date.now() - peakPoint.time.getTime());
+        if (dtPeak > closeMs) {
+          const p = projectAzEl(peakPoint.az, peakPoint.el, heading, pitchUp);
+          if (p) {
+            sctx.beginPath();
+            sctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+            sctx.fillStyle = 'rgba(255,184,77,1)';
+            sctx.shadowColor = 'rgba(255,184,77,0.8)';
+            sctx.shadowBlur = 10;
+            sctx.fill();
+            sctx.shadowBlur = 0;
+            sctx.lineWidth = 2;
+            sctx.strokeStyle = 'rgba(255,255,255,0.95)';
+            sctx.stroke();
+
+            const tStr = peakPoint.time.toLocaleTimeString([], {
+              hour: '2-digit', minute: '2-digit'
+            });
+            const elStr = `${peakPoint.el.toFixed(0)}° peak`;
+            sctx.font = '600 12px -apple-system, sans-serif';
+            sctx.fillStyle = '#fff';
+            sctx.fillText(tStr, p.x + 11, p.y - 6);
+            sctx.font = '10px -apple-system, sans-serif';
+            sctx.fillStyle = 'rgba(255,184,77,0.95)';
+            sctx.fillText(elStr, p.x + 11, p.y + 8);
+          }
+        }
+      }
     }
 
     // Current ISS — glowing pulsing circle at the head of the trail
@@ -624,38 +680,29 @@
       spdTxt.textContent  = `${(s.speedKmS * 3600).toFixed(0)} km/h`;
 
       if (heading !== null) {
-        // Heading delta: how far left/right of where I'm pointing
-        const dAz = shortestAngle(s.azDeg - heading);
+        const pitchUp = pitch - 90;
+        const cd = cameraDeltas(s.azDeg, s.elDeg, heading, pitchUp);
+        if (cd) {
+          const W = window.innerWidth, H = window.innerHeight;
+          // ISS is "in frame" when it is in front of the camera and the
+          // projected point falls inside the viewport — same definition the
+          // canvas uses, so the fade matches what's drawn.
+          const inFrame = cd.dF > 0.1 &&
+                          cd.x >= 0 && cd.x <= W &&
+                          cd.y >= 0 && cd.y <= H &&
+                          s.elDeg > -5;
 
-        // Approx pitch of device pointing: when phone is upright (beta ~ 90) it's pointing horizon;
-        // tilting the top edge of the phone back (camera toward sky) makes beta > 90.
-        const devicePitchDeg = pitch - 90;       // 0 = horizon, +90 = straight up
-        const dEl = s.elDeg - devicePitchDeg;
-
-        // Rough camera FOV (most phones ~60° horizontal, ~45° vertical when in portrait)
-        const FOVx = 60, FOVy = 45;
-        const inFrameX = Math.abs(dAz) <= FOVx / 2;
-        const inFrameY = Math.abs(dEl) <= FOVy / 2;
-
-        if (inFrameX && inFrameY && s.elDeg > -5) {
-          // ISS is in frame — canvas draws the circle; hide arrow.
-          arrowWrap.style.opacity = '0';
-        } else {
-          arrowWrap.style.opacity = '1';
-
-          // Arrow points "up" by default = forward (where you're looking).
-          // Rotate clockwise by dAz so it points toward ISS azimuth.
-          // If ISS is below horizon or below your pitch, tilt the arrow down a bit visually.
-          let rot = dAz;
-          // Slight vertical bias indicator: if dEl strongly negative, flip arrow downward
-          if (s.elDeg < 0) {
-            // ISS is below horizon — point arrow to az + indicate "down" by adding 180° if directly behind in pitch
+          if (inFrame) {
+            arrowWrap.style.opacity = '0';
+          } else {
+            arrowWrap.style.opacity = '1';
+            // Rotate the arrow toward the on-screen direction of the ISS.
+            // atan2(right, up) gives the clockwise angle from screen-up that
+            // an upward-pointing arrow must rotate to point at the target.
+            const rot = Math.atan2(cd.dR, cd.dU) * DEG;
+            arrow.style.transform = `rotate(${rot}deg)`;
+            arrowWrap.style.transform = `translate(-50%, -50%)`;
           }
-          arrow.style.transform = `rotate(${rot}deg)`;
-
-          // If target requires a big upward tilt, nudge arrow up; downward tilt, nudge down
-          const tiltNudge = Math.max(-80, Math.min(80, dEl));
-          arrowWrap.style.transform = `translate(-50%, calc(-50% - ${tiltNudge * 1.2}px))`;
         }
       }
 
