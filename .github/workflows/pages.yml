@@ -3,7 +3,7 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches:
-      - claude/iss-tracker-ar-app-ShrrX
+      - claude/fresh-app-5-dollar-7ar1q
       - main
   workflow_dispatch:
 
