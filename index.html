@@ -2,781 +2,762 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-<meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="theme-color" content="#000000" />
-<title>ISS AR Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0a0f" />
+<title>Print Studio — Generative Art Prints</title>
 <style>
-  :root { color-scheme: dark; }
+  :root {
+    --bg: #0a0a0f;
+    --panel: #14141d;
+    --panel-2: #1c1c2a;
+    --line: #2a2a3a;
+    --text: #e8e8f0;
+    --muted: #8b8ba0;
+    --accent: #ffd23f;
+    --accent-2: #ee4266;
+  }
+  * { box-sizing: border-box; }
   html, body {
-    margin: 0; padding: 0; height: 100%; width: 100%;
-    background: #000; color: #fff;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    overflow: hidden;
-    touch-action: none;
-    -webkit-user-select: none; user-select: none;
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    overscroll-behavior: none;
   }
-  #cam {
-    position: fixed; inset: 0;
-    width: 100%; height: 100%;
-    object-fit: cover;
+  .app {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    min-height: 100vh;
+  }
+  @media (max-width: 880px) {
+    .app { grid-template-columns: 1fr; }
+  }
+  aside.controls {
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    padding: 22px 20px 32px;
+    overflow-y: auto;
+    max-height: 100vh;
+  }
+  main.canvas-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 28px;
+    background: radial-gradient(ellipse at center, #1a1a25 0%, #06060a 75%);
+    min-height: 60vh;
+    position: relative;
+  }
+  canvas#preview {
+    max-width: 100%;
+    max-height: calc(100vh - 60px);
+    box-shadow: 0 25px 70px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.08);
+    border-radius: 4px;
     background: #000;
-    z-index: 0;
-  }
-  #overlay {
-    position: fixed; inset: 0;
-    z-index: 1;
-    pointer-events: none;
-  }
-  #sky {
-    position: fixed; inset: 0;
-    width: 100%; height: 100%;
-    z-index: 1;
-    pointer-events: none;
-  }
-
-  /* Start screen */
-  #start {
-    position: fixed; inset: 0;
-    background: radial-gradient(circle at 50% 30%, #0b1330 0%, #000 70%);
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    padding: env(safe-area-inset-top) 24px env(safe-area-inset-bottom) 24px;
-    z-index: 10;
-    text-align: center;
-  }
-  #start h1 {
-    font-size: 28px; margin: 0 0 8px; letter-spacing: 0.5px;
-  }
-  #start p {
-    font-size: 15px; opacity: 0.8; line-height: 1.45;
-    max-width: 320px; margin: 0 0 28px;
-  }
-  #startBtn {
-    appearance: none; border: none;
-    background: linear-gradient(135deg, #4f8cff, #2dd4bf);
-    color: #fff; font-weight: 600; font-size: 17px;
-    padding: 16px 28px; border-radius: 999px;
-    box-shadow: 0 8px 24px rgba(79,140,255,0.35);
     cursor: pointer;
   }
-  #startBtn:active { transform: scale(0.97); }
-  #startErr {
-    margin-top: 16px; color: #ff6b6b; font-size: 13px; min-height: 18px;
-    max-width: 320px;
+  h1 {
+    font-size: 19px; margin: 0 0 4px;
+    letter-spacing: 0.3px;
+    display: flex; align-items: center; gap: 8px;
   }
-
-  /* Top status panel */
-  #top {
-    position: fixed; left: 12px; right: 12px;
-    top: calc(env(safe-area-inset-top) + 10px);
-    display: flex; gap: 8px; justify-content: space-between;
-    z-index: 2; pointer-events: none;
+  h1 .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    box-shadow: 0 0 12px var(--accent-2);
   }
-  .pill {
-    background: rgba(0,0,0,0.55);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    padding: 8px 12px; border-radius: 12px;
-    font-size: 12px; line-height: 1.3;
-    border: 1px solid rgba(255,255,255,0.12);
+  .tagline { color: var(--muted); font-size: 12.5px; margin: 0 0 22px; line-height: 1.5; }
+  .group { margin: 0 0 16px; }
+  .group label.heading {
+    display: block;
+    font-size: 10.5px;
+    letter-spacing: 1.6px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 8px;
+    font-weight: 600;
   }
-  .pill b { font-weight: 600; color: #2dd4bf; }
-  .pill.warn b { color: #ffb84d; }
-  .pill.err b { color: #ff6b6b; }
-
-  /* Bottom info card */
-  #bottom {
-    position: fixed; left: 12px; right: 12px;
-    bottom: calc(env(safe-area-inset-bottom) + 12px);
-    background: rgba(0,0,0,0.6);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 16px;
-    padding: 12px 14px;
-    z-index: 2;
-    font-size: 13px;
-    pointer-events: auto;
+  .btns { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .btns.three { grid-template-columns: repeat(3, 1fr); }
+  .btn {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    padding: 9px 11px;
+    font-size: 12.5px;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.12s;
+    font-family: inherit;
   }
-  #bottom .row {
-    display: flex; justify-content: space-between; gap: 12px;
-    margin: 2px 0;
+  .btn:hover { background: #252535; border-color: #3a3a4a; }
+  .btn.active {
+    background: linear-gradient(180deg, var(--accent), #f4b400);
+    color: #0a0a0f;
+    border-color: transparent;
+    font-weight: 600;
   }
-  #bottom .label { opacity: 0.65; }
-  #bottom .val { font-variant-numeric: tabular-nums; }
-  #bottom h2 {
-    font-size: 12px; font-weight: 600;
-    margin: 0 0 6px; letter-spacing: 1px;
-    opacity: 0.7; text-transform: uppercase;
+  .swatches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .swatch {
+    aspect-ratio: 1;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
-  #bottom .divider {
-    height: 1px; background: rgba(255,255,255,0.1);
-    margin: 8px 0;
+  .swatch.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(255,210,63,0.25);
   }
-  #passLine { color: #2dd4bf; font-weight: 600; }
-  #passDetail { opacity: 0.75; font-size: 12px; }
-
-  /* AR arrow / marker */
-  #arrowWrap {
-    position: fixed; left: 50%; top: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 1; pointer-events: none;
-    transition: transform 0.08s linear, opacity 0.2s linear;
-    will-change: transform;
+  .swatch .stripe { flex: 1; }
+  input[type=range] {
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    background: var(--line);
+    border-radius: 2px;
+    outline: none;
+    margin: 6px 0 2px;
   }
-  #arrow {
-    width: 140px; height: 140px;
-    transition: transform 0.08s linear, opacity 0.2s linear;
-    will-change: transform;
-    filter: drop-shadow(0 0 12px rgba(45,212,191,0.55));
-  }
-  /* Old DOM target marker — replaced by canvas-drawn circle. Kept for safety. */
-  #issDot { display: none; }
-
-  #crosshair {
-    position: fixed; left: 50%; top: 50%;
-    width: 28px; height: 28px;
-    margin-left: -14px; margin-top: -14px;
-    border: 1px solid rgba(255,255,255,0.35);
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px; height: 16px;
+    background: var(--accent);
     border-radius: 50%;
-    z-index: 1; pointer-events: none;
+    cursor: pointer;
+    border: 0;
   }
-  #crosshair::before, #crosshair::after {
-    content: ""; position: absolute; background: rgba(255,255,255,0.35);
+  input[type=range]::-moz-range-thumb {
+    width: 16px; height: 16px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+    border: 0;
   }
-  #crosshair::before { left: 50%; top: -6px; width: 1px; height: 8px; }
-  #crosshair::after  { top: 50%; left: -6px; height: 1px; width: 8px; }
-
-  .hidden { display: none !important; }
+  .val { font-size: 11px; color: var(--muted); float: right; }
+  .big {
+    width: 100%;
+    padding: 13px;
+    border: 0;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  .big.primary {
+    background: linear-gradient(180deg, var(--accent), #f4b400);
+    color: #0a0a0f;
+  }
+  .big.primary:hover { filter: brightness(1.06); }
+  .big.secondary {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--line);
+  }
+  .big.secondary:hover { background: #252535; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .stat { font-size: 11px; color: var(--muted); margin: 10px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #gallery {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-top: 6px;
+  }
+  #gallery .thumb {
+    aspect-ratio: 1;
+    border-radius: 6px;
+    overflow: hidden;
+    cursor: pointer;
+    border: 1px solid var(--line);
+    background-size: cover;
+    background-position: center;
+    transition: transform 0.12s;
+  }
+  #gallery .thumb:hover { transform: scale(1.06); border-color: var(--accent); }
+  #gallery .empty { grid-column: 1/-1; color: var(--muted); font-size: 11.5px; padding: 8px 2px; }
+  #busy {
+    position: absolute; inset: 0;
+    background: rgba(6,6,10,0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    color: var(--text);
+    font-size: 13px;
+    backdrop-filter: blur(2px);
+    z-index: 10;
+  }
+  #busy.on { display: flex; }
+  .spinner {
+    width: 28px; height: 28px;
+    border: 3px solid rgba(255,255,255,0.15);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-right: 10px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hint {
+    text-align: center;
+    color: var(--muted);
+    font-size: 11px;
+    margin-top: 14px;
+  }
+  @media (max-width: 880px) {
+    aside.controls { order: 2; max-height: none; border-right: 0; border-top: 1px solid var(--line); }
+    main.canvas-wrap { order: 1; padding: 16px; }
+    canvas#preview { max-height: 70vh; }
+  }
 </style>
 </head>
 <body>
+<div class="app">
+  <aside class="controls">
+    <h1><span class="dot"></span>Print Studio</h1>
+    <p class="tagline">Generate unique high-resolution art prints. Click the canvas to remix. Save favorites. Download in 4K — yours to keep, hang, or list.</p>
 
-<video id="cam" autoplay playsinline muted></video>
-<canvas id="sky"></canvas>
-<div id="overlay"></div>
+    <div class="group">
+      <label class="heading">Style</label>
+      <div class="btns three" id="styles">
+        <button class="btn active" data-style="flow">Flow</button>
+        <button class="btn" data-style="voronoi">Voronoi</button>
+        <button class="btn" data-style="mandala">Mandala</button>
+        <button class="btn" data-style="plasma">Plasma</button>
+        <button class="btn" data-style="tiles">Tiles</button>
+        <button class="btn" data-style="dither">Dither</button>
+      </div>
+    </div>
 
-<div id="crosshair"></div>
+    <div class="group">
+      <label class="heading">Palette</label>
+      <div class="swatches" id="palettes"></div>
+    </div>
 
-<div id="issDot">ISS</div>
-<div id="arrowWrap">
-  <svg id="arrow" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <defs>
-      <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#2dd4bf"/>
-        <stop offset="100%" stop-color="#4f8cff"/>
-      </linearGradient>
-    </defs>
-    <!-- Arrow pointing up -->
-    <polygon points="50,6 84,64 60,64 60,94 40,94 40,64 16,64"
-             fill="url(#ag)" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>
-  </svg>
+    <div class="group">
+      <label class="heading">Density <span class="val" id="densityVal">50</span></label>
+      <input type="range" id="density" min="1" max="100" value="50" />
+    </div>
+
+    <div class="group">
+      <label class="heading">Aspect</label>
+      <div class="btns" id="aspects">
+        <button class="btn active" data-aspect="1:1">Square</button>
+        <button class="btn" data-aspect="4:5">Print 4:5</button>
+        <button class="btn" data-aspect="2:3">Poster</button>
+        <button class="btn" data-aspect="16:9">Wide</button>
+      </div>
+    </div>
+
+    <div class="group" style="margin-top: 22px">
+      <button class="big primary" id="regen">Regenerate</button>
+    </div>
+    <div class="row">
+      <button class="big secondary" id="save">Save</button>
+      <button class="big secondary" id="download">Download 4K</button>
+    </div>
+    <p class="stat" id="seed-info"></p>
+
+    <div class="group" style="margin-top: 22px">
+      <label class="heading">Saved Prints</label>
+      <div id="gallery"></div>
+    </div>
+
+    <p class="hint">Tip: tap the canvas for a new seed</p>
+  </aside>
+
+  <main class="canvas-wrap">
+    <canvas id="preview"></canvas>
+    <div id="busy"><div class="spinner"></div>Rendering 4K…</div>
+  </main>
 </div>
 
-<div id="top">
-  <div class="pill" id="statusPill"><b>STATUS</b><br/><span id="statusTxt">Starting…</span></div>
-  <div class="pill" id="headPill"><b>HEADING</b><br/><span id="headTxt">—</span></div>
-</div>
-
-<div id="bottom">
-  <h2>ISS Now</h2>
-  <div class="row"><span class="label">Direction</span><span class="val" id="azElTxt">—</span></div>
-  <div class="row"><span class="label">Distance</span><span class="val" id="distTxt">—</span></div>
-  <div class="row"><span class="label">Altitude</span><span class="val" id="altTxt">—</span></div>
-  <div class="row"><span class="label">Ground speed</span><span class="val" id="spdTxt">—</span></div>
-  <div class="divider"></div>
-  <h2>Next Visible Pass</h2>
-  <div id="passLine">Calculating…</div>
-  <div id="passDetail">&nbsp;</div>
-</div>
-
-<div id="start">
-  <h1>🛰️ ISS AR Tracker</h1>
-  <p>Point your phone at the sky. The arrow guides you to the International Space Station — when it's in frame, a target ring locks on.</p>
-  <button id="startBtn">Start AR Tracking</button>
-  <div id="startErr"></div>
-  <p style="font-size:12px; opacity:0.55; margin-top:24px;">
-    Needs camera, location, and motion access. Best viewed full-screen on iPhone in Safari.
-  </p>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js"></script>
 <script>
-(() => {
-  const $ = (id) => document.getElementById(id);
-  const startEl = $('start'), startBtn = $('startBtn'), startErr = $('startErr');
-  const video = $('cam');
-  const statusTxt = $('statusTxt'), statusPill = $('statusPill');
-  const headTxt = $('headTxt');
-  const azElTxt = $('azElTxt'), distTxt = $('distTxt'), altTxt = $('altTxt'), spdTxt = $('spdTxt');
-  const passLine = $('passLine'), passDetail = $('passDetail');
-  const arrowWrap = $('arrowWrap'), arrow = $('arrow'), issDot = $('issDot');
+'use strict';
 
-  // Hard-coded ISS NORAD ID
-  const ISS_NORAD = 25544;
-  // Celestrak supports CORS for these endpoints
-  const TLE_URL = `https://celestrak.org/NORAD/elements/gp.php?CATNR=${ISS_NORAD}&FORMAT=TLE`;
-  // Fallback CORS proxy: only used if direct fetch fails
-  const TLE_URL_FALLBACK = `https://corsproxy.io/?https%3A%2F%2Fcelestrak.org%2FNORAD%2Felements%2Fgp.php%3FCATNR%3D${ISS_NORAD}%26FORMAT%3DTLE`;
+// ---------- PRNG ----------
+function mulberry32(seed) {
+  let s = seed >>> 0;
+  return function() {
+    s = (s + 0x6D2B79F5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
-  let satrec = null;
-  let observer = null;        // { lat, lon, altKm }
-  let heading = null;         // compass heading in deg (0 = north, 90 = east)
-  let pitch = 0;              // device pitch in deg (0 = pointing horizon, 90 = pointing up)
-  let roll = 0;
-  let lastErr = '';
-
-  // --- Logging helper -------------------------------------------------------
-  function setStatus(text, kind) {
-    statusTxt.textContent = text;
-    statusPill.classList.remove('warn', 'err');
-    if (kind) statusPill.classList.add(kind);
+// ---------- Perlin noise ----------
+class Noise {
+  constructor(rng) {
+    const perm = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) perm[i] = i;
+    for (let i = 255; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      const t = perm[i]; perm[i] = perm[j]; perm[j] = t;
+    }
+    this.p = new Uint8Array(512);
+    for (let i = 0; i < 512; i++) this.p[i] = perm[i & 255];
   }
-  function showErr(msg) {
-    lastErr = msg;
-    startErr.textContent = msg;
-    console.error(msg);
+  fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+  lerp(a, b, t) { return a + t * (b - a); }
+  grad(hash, x, y) {
+    const h = hash & 7;
+    const u = h < 4 ? x : y;
+    const v = h < 4 ? y : x;
+    return ((h & 1) ? -u : u) + ((h & 2) ? -2 * v : 2 * v);
   }
+  noise2(x, y) {
+    const X = Math.floor(x) & 255;
+    const Y = Math.floor(y) & 255;
+    x -= Math.floor(x); y -= Math.floor(y);
+    const u = this.fade(x), v = this.fade(y);
+    const A = this.p[X] + Y, B = this.p[X + 1] + Y;
+    return this.lerp(
+      this.lerp(this.grad(this.p[A], x, y), this.grad(this.p[B], x - 1, y), u),
+      this.lerp(this.grad(this.p[A + 1], x, y - 1), this.grad(this.p[B + 1], x - 1, y - 1), u),
+      v
+    );
+  }
+  fbm(x, y, octaves) {
+    let v = 0, amp = 1, freq = 1, max = 0;
+    for (let i = 0; i < octaves; i++) {
+      v += amp * this.noise2(x * freq, y * freq);
+      max += amp; amp *= 0.5; freq *= 2;
+    }
+    return v / max;
+  }
+}
 
-  // --- Permission flow ------------------------------------------------------
-  async function requestOrientationPerm() {
-    if (typeof DeviceOrientationEvent !== 'undefined' &&
-        typeof DeviceOrientationEvent.requestPermission === 'function') {
-      try {
-        const s = await DeviceOrientationEvent.requestPermission();
-        if (s !== 'granted') throw new Error('Motion permission denied');
-      } catch (e) {
-        throw new Error('Motion permission denied — enable Motion & Orientation Access in Safari settings.');
+// ---------- Palettes ----------
+const PALETTES = {
+  sunset:    ['#fde7c1','#f8b878','#ef7b45','#cf3759','#5c0e62'],
+  ocean:     ['#caf0f8','#90e0ef','#00b4d8','#0077b6','#03045e'],
+  forest:    ['#dad7cd','#a3b18a','#588157','#3a5a40','#1f2e23'],
+  neon:      ['#ffbe0b','#fb5607','#ff006e','#8338ec','#3a86ff'],
+  vaporwave: ['#fffb96','#05ffa1','#01cdfe','#b967ff','#ff71ce'],
+  mono:      ['#f5f5f5','#bbbbbb','#7a7a7a','#3a3a3a','#0a0a0a'],
+  pastel:    ['#ffaebc','#ffd6e0','#ffefcf','#d4f0f0','#a0c4ff'],
+  fire:      ['#fff3b0','#ffd60a','#ff9500','#e63946','#5b0a0a'],
+  earth:     ['#f1ddc4','#d6a77a','#a26a4b','#6b4226','#2b1a10'],
+  cyber:     ['#f7e733','#05d9e8','#ff2a6d','#7a04eb','#0d0221'],
+  twilight:  ['#f9e4d4','#e6a4b4','#7474bf','#302b63','#0f0c29'],
+  desert:    ['#f6bd60','#f7ede2','#f5cac3','#84a59d','#34495e'],
+};
+
+// ---------- Color helpers ----------
+function hexToRgb(h) {
+  const v = parseInt(h.slice(1), 16);
+  return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+}
+function lerpRgb(a, b, t) {
+  return [
+    a[0] + (b[0] - a[0]) * t,
+    a[1] + (b[1] - a[1]) * t,
+    a[2] + (b[2] - a[2]) * t,
+  ];
+}
+function paletteRgb(palette, t) {
+  t = Math.max(0, Math.min(0.999999, t));
+  const seg = t * (palette.length - 1);
+  const i = Math.floor(seg);
+  const a = hexToRgb(palette[i]);
+  const b = hexToRgb(palette[i + 1]);
+  return lerpRgb(a, b, seg - i);
+}
+function paletteCss(palette, t) {
+  const c = paletteRgb(palette, t);
+  return `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
+}
+function paletteCssA(palette, t, alpha) {
+  const c = paletteRgb(palette, t);
+  return `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${alpha})`;
+}
+
+// ---------- Algorithms ----------
+function background(ctx, w, h, palette) {
+  ctx.fillStyle = palette[palette.length - 1];
+  ctx.fillRect(0, 0, w, h);
+}
+
+function flowField(ctx, opts) {
+  const { w, h, palette, density, rng, noise } = opts;
+  background(ctx, w, h, palette);
+  const particles = Math.floor(120 + density * 6);
+  const steps = 220;
+  const baseScale = 0.0022;
+  const swirl = 1.8 + (density / 100) * 2;
+  ctx.lineCap = 'round';
+  const baseWidth = Math.max(0.4, (w / 1400) * 1.4);
+  for (let p = 0; p < particles; p++) {
+    let x = rng() * w, y = rng() * h;
+    const t = rng();
+    const col = paletteCssA(palette, t, 0.55);
+    ctx.strokeStyle = col;
+    ctx.lineWidth = baseWidth * (0.5 + rng() * 1.6);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    for (let s = 0; s < steps; s++) {
+      const n = noise.fbm(x * baseScale, y * baseScale, 3);
+      const a = n * Math.PI * swirl;
+      x += Math.cos(a) * 1.6;
+      y += Math.sin(a) * 1.6;
+      if (x < -10 || y < -10 || x > w + 10 || y > h + 10) break;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+}
+
+function plasma(ctx, opts) {
+  const { w, h, palette, density, noise } = opts;
+  const img = ctx.createImageData(w, h);
+  const data = img.data;
+  const scale = 0.0015 + (101 - density) * 0.00006;
+  const oct = 3 + Math.round(density / 25);
+  let i = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const n = (noise.fbm(x * scale, y * scale, oct) + 1) * 0.5;
+      const c = paletteRgb(palette, n);
+      data[i++] = c[0] | 0; data[i++] = c[1] | 0; data[i++] = c[2] | 0; data[i++] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+function voronoi(ctx, opts) {
+  const { w, h, palette, density, rng } = opts;
+  const count = Math.floor(25 + density * 2);
+  const pts = [];
+  for (let i = 0; i < count; i++) {
+    pts.push({ x: rng() * w, y: rng() * h, t: rng() });
+  }
+  const img = ctx.createImageData(w, h);
+  const data = img.data;
+  const step = Math.max(1, Math.floor(w / 1100));
+  for (let y = 0; y < h; y += step) {
+    for (let x = 0; x < w; x += step) {
+      let bd = Infinity, bp = pts[0];
+      for (let i = 0; i < count; i++) {
+        const dx = pts[i].x - x, dy = pts[i].y - y;
+        const d = dx * dx + dy * dy;
+        if (d < bd) { bd = d; bp = pts[i]; }
       }
-    }
-    if (typeof DeviceMotionEvent !== 'undefined' &&
-        typeof DeviceMotionEvent.requestPermission === 'function') {
-      try { await DeviceMotionEvent.requestPermission(); } catch (e) { /* ignore */ }
-    }
-  }
-
-  async function startCamera() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      throw new Error('Camera not available in this browser.');
-    }
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' } },
-      audio: false
-    });
-    video.srcObject = stream;
-    await video.play().catch(() => {});
-  }
-
-  function getLocation() {
-    return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) return reject(new Error('Geolocation not supported'));
-      navigator.geolocation.getCurrentPosition(
-        (pos) => resolve({
-          lat: pos.coords.latitude,
-          lon: pos.coords.longitude,
-          altKm: (pos.coords.altitude || 0) / 1000
-        }),
-        (err) => reject(new Error('Location: ' + err.message)),
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
-      );
-      // Keep tracking
-      navigator.geolocation.watchPosition(
-        (pos) => {
-          observer = {
-            lat: pos.coords.latitude,
-            lon: pos.coords.longitude,
-            altKm: (pos.coords.altitude || 0) / 1000
-          };
-        },
-        () => {},
-        { enableHighAccuracy: true, maximumAge: 5000 }
-      );
-    });
-  }
-
-  // --- TLE fetch + satellite.js setup ---------------------------------------
-  async function fetchTLE() {
-    let text = '';
-    try {
-      const r = await fetch(TLE_URL, { cache: 'no-cache' });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      text = await r.text();
-    } catch (e) {
-      const r = await fetch(TLE_URL_FALLBACK, { cache: 'no-cache' });
-      if (!r.ok) throw new Error('TLE fetch failed');
-      text = await r.text();
-    }
-    const lines = text.trim().split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-    // Format: name, line1, line2  (sometimes only the two lines)
-    let l1, l2;
-    if (lines.length >= 3) { l1 = lines[1]; l2 = lines[2]; }
-    else if (lines.length === 2) { l1 = lines[0]; l2 = lines[1]; }
-    else throw new Error('Bad TLE data');
-    satrec = satellite.twoline2satrec(l1, l2);
-  }
-
-  // --- Math helpers ---------------------------------------------------------
-  const RAD = Math.PI / 180, DEG = 180 / Math.PI;
-  function normDeg(d) { d = d % 360; if (d < 0) d += 360; return d; }
-
-  // --- Sky canvas + AR projection -------------------------------------------
-  const sky = document.getElementById('sky');
-  const sctx = sky.getContext('2d');
-  function resizeSky() {
-    const dpr = window.devicePixelRatio || 1;
-    sky.width  = Math.floor(window.innerWidth  * dpr);
-    sky.height = Math.floor(window.innerHeight * dpr);
-    sky.style.width  = window.innerWidth  + 'px';
-    sky.style.height = window.innerHeight + 'px';
-    sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  }
-  window.addEventListener('resize', resizeSky);
-  window.addEventListener('orientationchange', resizeSky);
-  resizeSky();
-
-  // Pinhole-camera projection from (az, el) → screen-space deltas given device pose.
-  // Returns { dR, dU, dF, x, y } or null if heading is unknown.
-  //   dR / dU / dF : world vector dotted with camera right / up / forward
-  //   x, y         : pinhole projection in CSS pixels (only meaningful when dF > 0)
-  function cameraDeltas(azDeg, elDeg, headingDeg, pitchUpDeg) {
-    if (headingDeg === null || headingDeg === undefined) return null;
-    const azR = azDeg * RAD, elR = elDeg * RAD;
-    // World vector in ENU-ish frame (x=east, y=north, z=up)
-    const vx = Math.sin(azR) * Math.cos(elR);
-    const vy = Math.cos(azR) * Math.cos(elR);
-    const vz = Math.sin(elR);
-    const hR = headingDeg * RAD, pR = pitchUpDeg * RAD;
-    // Camera forward
-    const fx = Math.sin(hR) * Math.cos(pR);
-    const fy = Math.cos(hR) * Math.cos(pR);
-    const fz = Math.sin(pR);
-    // Right (horizontal, perpendicular to forward)
-    const rx =  Math.cos(hR);
-    const ry = -Math.sin(hR);
-    const rz = 0;
-    // Up = right × forward
-    const ux = ry * fz - rz * fy;
-    const uy = rz * fx - rx * fz;
-    const uz = rx * fy - ry * fx;
-    const dF = vx*fx + vy*fy + vz*fz;
-    const dR = vx*rx + vy*ry + vz*rz;
-    const dU = vx*ux + vy*uy + vz*uz;
-    const W = window.innerWidth, H = window.innerHeight;
-    const FOV_H = 60 * RAD;
-    const focal = (W / 2) / Math.tan(FOV_H / 2);
-    const safeF = dF > 0.001 ? dF : 0.001;
-    return {
-      dR, dU, dF,
-      x: W / 2 + (dR / safeF) * focal,
-      y: H / 2 - (dU / safeF) * focal
-    };
-  }
-
-  // Convenience wrapper that returns just {x, y} if the point is in front of camera.
-  function projectAzEl(azDeg, elDeg, headingDeg, pitchUpDeg) {
-    const d = cameraDeltas(azDeg, elDeg, headingDeg, pitchUpDeg);
-    if (!d || d.dF < 0.05) return null;
-    return { x: d.x, y: d.y };
-  }
-
-  // Trail state — recomputed periodically
-  let pastTrail = [];        // last ~30 min of (az, el)
-  let futureTrail = [];      // next visible pass (az, el)
-  let lastPass = null;       // cached findNextPass() result
-  let peakPoint = null;      // {az, el, time} of next-pass peak
-  let trailRecalcAt = 0;
-  let lastTrailHead = null;  // {az, el} for current marker
-
-  function recomputeTrails(now) {
-    if (!satrec || !observer) return;
-    pastTrail = [];
-    const t0 = now.getTime();
-    for (let dt = -30 * 60 * 1000; dt <= 0; dt += 30 * 1000) {
-      const s = computeIssState(new Date(t0 + dt));
-      if (s) pastTrail.push({ az: s.azDeg, el: s.elDeg });
-    }
-    if (pastTrail.length) lastTrailHead = pastTrail[pastTrail.length - 1];
-
-    futureTrail = [];
-    peakPoint = null;
-    if (lastPass) {
-      const start = Math.max(lastPass.riseT.getTime(), t0);
-      const end   = lastPass.setT.getTime();
-      if (end > start) {
-        for (let t = start; t <= end; t += 10 * 1000) {
-          const s = computeIssState(new Date(t));
-          if (s) futureTrail.push({ az: s.azDeg, el: s.elDeg });
-        }
-      }
-      const peakState = computeIssState(lastPass.maxT);
-      if (peakState) {
-        peakPoint = {
-          az: peakState.azDeg,
-          el: peakState.elDeg,
-          time: lastPass.maxT
-        };
-      }
-    }
-  }
-
-  function drawTrail(points, headingDeg, pitchUpDeg, opts) {
-    if (!points || points.length < 2) return;
-    sctx.lineWidth = opts.width;
-    sctx.lineCap = 'round';
-    sctx.lineJoin = 'round';
-    if (opts.dashed) sctx.setLineDash(opts.dashed); else sctx.setLineDash([]);
-
-    if (opts.fade) {
-      // Per-segment alpha: older = more transparent
-      for (let i = 1; i < points.length; i++) {
-        const a = projectAzEl(points[i-1].az, points[i-1].el, headingDeg, pitchUpDeg);
-        const b = projectAzEl(points[i  ].az, points[i  ].el, headingDeg, pitchUpDeg);
-        if (!a || !b) continue;
-        const t = i / (points.length - 1);   // 0..1, 1 = newest
-        const alpha = (0.1 + 0.9 * t).toFixed(2);
-        sctx.strokeStyle = `rgba(45,212,191,${alpha})`;
-        sctx.beginPath();
-        sctx.moveTo(a.x, a.y);
-        sctx.lineTo(b.x, b.y);
-        sctx.stroke();
-      }
-    } else {
-      sctx.strokeStyle = opts.color;
-      sctx.beginPath();
-      let started = false;
-      for (const p of points) {
-        const q = projectAzEl(p.az, p.el, headingDeg, pitchUpDeg);
-        if (!q) { started = false; continue; }
-        if (!started) { sctx.moveTo(q.x, q.y); started = true; }
-        else sctx.lineTo(q.x, q.y);
-      }
-      sctx.stroke();
-    }
-    sctx.setLineDash([]);
-  }
-
-  function drawSky(currentState) {
-    sctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-    if (heading === null) return;
-    const pitchUp = pitch - 90;
-
-    // Past trail — fading teal line
-    drawTrail(pastTrail, heading, pitchUp, { fade: true, width: 2.5 });
-
-    // Future pass — dotted amber line
-    if (futureTrail.length > 1) {
-      drawTrail(futureTrail, heading, pitchUp, {
-        color: 'rgba(255,184,77,0.9)', width: 2.5, dashed: [4, 8]
-      });
-      // Mark rise & set with small ticks
-      const rise = futureTrail[0], set = futureTrail[futureTrail.length - 1];
-      [rise, set].forEach((pt, idx) => {
-        const p = projectAzEl(pt.az, pt.el, heading, pitchUp);
-        if (!p) return;
-        sctx.beginPath();
-        sctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
-        sctx.fillStyle = 'rgba(255,184,77,0.95)';
-        sctx.fill();
-        sctx.font = '11px -apple-system, sans-serif';
-        sctx.fillStyle = 'rgba(255,184,77,1)';
-        sctx.fillText(idx === 0 ? 'RISE' : 'SET', p.x + 8, p.y - 6);
-      });
-
-      // Peak marker — drawn at the highest point with the local arrival time.
-      // Hidden when the live ISS is close (in time) to that peak.
-      if (peakPoint) {
-        const closeMs = 90 * 1000;
-        const dtPeak = Math.abs(Date.now() - peakPoint.time.getTime());
-        if (dtPeak > closeMs) {
-          const p = projectAzEl(peakPoint.az, peakPoint.el, heading, pitchUp);
-          if (p) {
-            sctx.beginPath();
-            sctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
-            sctx.fillStyle = 'rgba(255,184,77,1)';
-            sctx.shadowColor = 'rgba(255,184,77,0.8)';
-            sctx.shadowBlur = 10;
-            sctx.fill();
-            sctx.shadowBlur = 0;
-            sctx.lineWidth = 2;
-            sctx.strokeStyle = 'rgba(255,255,255,0.95)';
-            sctx.stroke();
-
-            const tStr = peakPoint.time.toLocaleTimeString([], {
-              hour: '2-digit', minute: '2-digit'
-            });
-            const elStr = `${peakPoint.el.toFixed(0)}° peak`;
-            sctx.font = '600 12px -apple-system, sans-serif';
-            sctx.fillStyle = '#fff';
-            sctx.fillText(tStr, p.x + 11, p.y - 6);
-            sctx.font = '10px -apple-system, sans-serif';
-            sctx.fillStyle = 'rgba(255,184,77,0.95)';
-            sctx.fillText(elStr, p.x + 11, p.y + 8);
-          }
+      const c = paletteRgb(palette, bp.t);
+      const sd = Math.min(1, Math.sqrt(bd) / (Math.min(w, h) * 0.18));
+      const sh = 0.65 + 0.35 * (1 - sd);
+      const r = (c[0] * sh) | 0, g = (c[1] * sh) | 0, b = (c[2] * sh) | 0;
+      for (let dy = 0; dy < step && y + dy < h; dy++) {
+        for (let dx = 0; dx < step && x + dx < w; dx++) {
+          const idx = ((y + dy) * w + (x + dx)) * 4;
+          data[idx] = r; data[idx + 1] = g; data[idx + 2] = b; data[idx + 3] = 255;
         }
       }
     }
+  }
+  ctx.putImageData(img, 0, 0);
+}
 
-    // Current ISS — glowing pulsing circle at the head of the trail
-    if (currentState) {
-      const p = projectAzEl(currentState.azDeg, currentState.elDeg, heading, pitchUp);
-      if (p) {
-        const t = (Date.now() % 1600) / 1600;
-        const pulseR = 18 + 14 * t;
-        const pulseA = (1 - t) * 0.55;
-        sctx.beginPath();
-        sctx.arc(p.x, p.y, pulseR, 0, Math.PI * 2);
-        sctx.strokeStyle = `rgba(45,212,191,${pulseA})`;
-        sctx.lineWidth = 2;
-        sctx.stroke();
-
-        sctx.beginPath();
-        sctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
-        sctx.fillStyle = 'rgba(45,212,191,0.95)';
-        sctx.shadowColor = 'rgba(45,212,191,0.9)';
-        sctx.shadowBlur = 18;
-        sctx.fill();
-        sctx.shadowBlur = 0;
-        sctx.lineWidth = 2;
-        sctx.strokeStyle = 'rgba(255,255,255,0.9)';
-        sctx.stroke();
-
-        sctx.font = '600 11px -apple-system, sans-serif';
-        sctx.fillStyle = '#fff';
-        sctx.fillText('ISS', p.x + 18, p.y + 4);
+function mandala(ctx, opts) {
+  const { w, h, palette, density, rng } = opts;
+  background(ctx, w, h, palette);
+  ctx.save();
+  ctx.translate(w / 2, h / 2);
+  const symmetry = 6 + Math.floor(rng() * 7);
+  const rings = 5 + Math.floor(density / 11);
+  const maxR = Math.min(w, h) * 0.48;
+  for (let ring = 0; ring < rings; ring++) {
+    const r0 = (ring / rings) * maxR;
+    const r1 = ((ring + 1) / rings) * maxR;
+    const subdiv = 2 + Math.floor(rng() * 4);
+    const segs = symmetry * subdiv;
+    const colA = rng();
+    const colB = rng();
+    for (let s = 0; s < segs; s++) {
+      const a0 = (s / segs) * Math.PI * 2;
+      const a1 = ((s + 1) / segs) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, r1, a0, a1);
+      ctx.arc(0, 0, r0, a1, a0, true);
+      ctx.closePath();
+      ctx.fillStyle = paletteCssA(palette, (s % 2 === 0) ? colA : colB, 0.85);
+      ctx.fill();
+    }
+    if (rng() > 0.35) {
+      const dotR = (r1 - r0) * (0.12 + rng() * 0.18);
+      const midR = (r0 + r1) / 2;
+      const dots = symmetry * (rng() > 0.5 ? 1 : 2);
+      ctx.fillStyle = paletteCss(palette, rng());
+      for (let d = 0; d < dots; d++) {
+        const a = (d / dots) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * midR, Math.sin(a) * midR, dotR, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
   }
+  ctx.restore();
+}
 
-  function computeIssState(date) {
-    if (!satrec || !observer) return null;
-    const pv = satellite.propagate(satrec, date);
-    if (!pv.position) return null;
-    const gmst = satellite.gstime(date);
-    const geo = satellite.eciToGeodetic(pv.position, gmst);
-    const obsGd = {
-      longitude: observer.lon * RAD,
-      latitude:  observer.lat * RAD,
-      height:    observer.altKm
-    };
-    const posEcf = satellite.eciToEcf(pv.position, gmst);
-    const look = satellite.ecfToLookAngles(obsGd, posEcf);
-    // Ground speed magnitude (km/s) from velocity vector projected — use total speed for display
-    const v = pv.velocity;
-    const speedKmS = v ? Math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z) : 0;
-    return {
-      latDeg: geo.latitude  * DEG,
-      lonDeg: geo.longitude * DEG,
-      altKm:  geo.height,
-      azDeg:  normDeg(look.azimuth  * DEG),
-      elDeg:  look.elevation * DEG,
-      rangeKm: look.rangeSat,
-      speedKmS
-    };
-  }
-
-  // Find next pass: step through future minutes, locate first window where elevation > 0
-  function findNextPass(fromDate) {
-    if (!satrec || !observer) return null;
-    const stepMs = 30 * 1000;
-    const horizonHours = 48;
-    const maxSteps = (horizonHours * 3600 * 1000) / stepMs;
-    let t = new Date(fromDate.getTime());
-    let prevEl = null, riseT = null, maxEl = -90, maxT = null, setT = null;
-
-    for (let i = 0; i < maxSteps; i++) {
-      const s = computeIssState(t);
-      if (!s) { t = new Date(t.getTime() + stepMs); continue; }
-      const el = s.elDeg;
-      if (prevEl !== null) {
-        if (prevEl <= 0 && el > 0) {
-          // Refine rise crossing
-          riseT = refineCrossing(new Date(t.getTime() - stepMs), t, 0);
-          maxEl = el; maxT = new Date(t.getTime());
-        } else if (riseT && el > maxEl) {
-          maxEl = el; maxT = new Date(t.getTime());
-        } else if (riseT && prevEl > 0 && el <= 0) {
-          setT = refineCrossing(new Date(t.getTime() - stepMs), t, 0);
-          return { riseT, setT, maxEl, maxT };
-        }
-      }
-      prevEl = el;
-      t = new Date(t.getTime() + stepMs);
-    }
-    return null;
-  }
-
-  function refineCrossing(t0, t1, targetEl) {
-    // Bisection between t0 and t1 to find elevation === targetEl
-    let lo = t0.getTime(), hi = t1.getTime();
-    for (let i = 0; i < 18; i++) {
-      const mid = (lo + hi) / 2;
-      const s = computeIssState(new Date(mid));
-      if (!s) break;
-      if (s.elDeg < targetEl) lo = mid; else hi = mid;
-    }
-    return new Date((lo + hi) / 2);
-  }
-
-  // --- Orientation handling -------------------------------------------------
-  function handleOrientation(e) {
-    // iOS: webkitCompassHeading gives true heading (0 = North), increasing clockwise
-    let h;
-    if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) {
-      h = e.webkitCompassHeading;
-    } else if (typeof e.alpha === 'number') {
-      // Fallback: alpha is anti-clockwise from device's initial north (less reliable)
-      h = 360 - e.alpha;
-    }
-    if (typeof h === 'number') heading = normDeg(h);
-    // beta: front-back tilt in degrees, -180..180. 0 = flat on table, 90 = upright portrait.
-    if (typeof e.beta === 'number') pitch = e.beta;
-    if (typeof e.gamma === 'number') roll = e.gamma;
-  }
-
-  // --- Render loop ----------------------------------------------------------
-  let pendingPassRecalc = 0;
-
-  function shortestAngle(a) { // wrap to -180..180
-    a = ((a + 180) % 360 + 360) % 360 - 180;
-    return a;
-  }
-
-  function fmtClock(d) {
-    return d.toLocaleString([], {
-      weekday: 'short', hour: '2-digit', minute: '2-digit'
-    });
-  }
-  function fmtRel(d) {
-    const ms = d.getTime() - Date.now();
-    if (ms < 0) return 'now';
-    const min = Math.floor(ms / 60000);
-    if (min < 60) return `in ${min} min`;
-    const h = Math.floor(min / 60);
-    const m = min % 60;
-    if (h < 24) return `in ${h}h ${m}m`;
-    const days = Math.floor(h / 24);
-    return `in ${days}d ${h % 24}h`;
-  }
-
-  function render() {
-    const now = new Date();
-    const s = computeIssState(now);
-
-    // Recompute trails once at boot, then every 30s
-    if (s && Date.now() > trailRecalcAt) {
-      trailRecalcAt = Date.now() + 30_000;
-      recomputeTrails(now);
-    }
-
-    // Draw past trail, future dotted line, and current ISS circle on canvas
-    drawSky(s);
-
-    if (s) {
-      azElTxt.textContent = `${s.azDeg.toFixed(0)}° az · ${s.elDeg.toFixed(1)}° el`;
-      distTxt.textContent = `${Math.round(s.rangeKm).toLocaleString()} km`;
-      altTxt.textContent  = `${s.altKm.toFixed(1)} km`;
-      spdTxt.textContent  = `${(s.speedKmS * 3600).toFixed(0)} km/h`;
-
-      if (heading !== null) {
-        const pitchUp = pitch - 90;
-        const cd = cameraDeltas(s.azDeg, s.elDeg, heading, pitchUp);
-        if (cd) {
-          const W = window.innerWidth, H = window.innerHeight;
-          // ISS is "in frame" when it is in front of the camera and the
-          // projected point falls inside the viewport — same definition the
-          // canvas uses, so the fade matches what's drawn.
-          const inFrame = cd.dF > 0.1 &&
-                          cd.x >= 0 && cd.x <= W &&
-                          cd.y >= 0 && cd.y <= H &&
-                          s.elDeg > -5;
-
-          if (inFrame) {
-            arrowWrap.style.opacity = '0';
-          } else {
-            arrowWrap.style.opacity = '1';
-            // Rotate the arrow toward the on-screen direction of the ISS.
-            // atan2(right, up) gives the clockwise angle from screen-up that
-            // an upward-pointing arrow must rotate to point at the target.
-            const rot = Math.atan2(cd.dR, cd.dU) * DEG;
-            arrow.style.transform = `rotate(${rot}deg)`;
-            arrowWrap.style.transform = `translate(-50%, -50%)`;
-          }
-        }
-      }
-
-      // Heading pill
-      headTxt.textContent = heading === null
-        ? 'no compass'
-        : `${heading.toFixed(0)}° ${compassLabel(heading)}`;
-
-      // Status pill
-      if (s.elDeg > 0) {
-        setStatus(`ISS visible · ${s.elDeg.toFixed(0)}° up`);
+function tiles(ctx, opts) {
+  const { w, h, palette, density, rng } = opts;
+  background(ctx, w, h, palette);
+  const cols = 5 + Math.floor(density / 8);
+  const rows = Math.max(1, Math.floor(cols * h / w));
+  const cw = w / cols, ch = h / rows;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = c * cw, y = r * ch;
+      const base = paletteCss(palette, rng());
+      ctx.fillStyle = base;
+      ctx.fillRect(x, y, cw + 1, ch + 1);
+      const choice = rng();
+      ctx.fillStyle = paletteCss(palette, rng());
+      ctx.beginPath();
+      if (choice < 0.25) {
+        ctx.moveTo(x, y); ctx.lineTo(x + cw, y); ctx.lineTo(x + cw, y + ch);
+        ctx.closePath(); ctx.fill();
+      } else if (choice < 0.5) {
+        ctx.arc(x + cw / 2, y + ch / 2, Math.min(cw, ch) * 0.42, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (choice < 0.75) {
+        ctx.moveTo(x + cw / 2, y);
+        ctx.lineTo(x + cw, y + ch / 2);
+        ctx.lineTo(x + cw / 2, y + ch);
+        ctx.lineTo(x, y + ch / 2);
+        ctx.closePath(); ctx.fill();
       } else {
-        setStatus(`Below horizon (${s.elDeg.toFixed(0)}°)`, 'warn');
+        const bars = 2 + Math.floor(rng() * 4);
+        for (let b = 0; b < bars; b++) {
+          ctx.fillStyle = paletteCss(palette, rng());
+          ctx.fillRect(x, y + (b / bars) * ch, cw, ch / bars * 0.55);
+        }
       }
     }
+  }
+}
 
-    // Recompute next pass every 60s or when missing
-    if (Date.now() > pendingPassRecalc) {
-      pendingPassRecalc = Date.now() + 60_000;
-      try {
-        const pass = findNextPass(new Date());
-        if (pass) {
-          lastPass = pass;
-          trailRecalcAt = 0;            // refresh trails on next frame
-          passLine.textContent = `${fmtClock(pass.riseT)} · ${fmtRel(pass.riseT)}`;
-          const durMin = Math.round((pass.setT - pass.riseT) / 60000);
-          passDetail.textContent =
-            `Peak ${pass.maxEl.toFixed(0)}° elevation · ${durMin} min visible`;
-        } else {
-          lastPass = null;
-          futureTrail = [];
-          passLine.textContent = 'No pass found in next 48h';
-          passDetail.textContent = '';
+function dither(ctx, opts) {
+  const { w, h, palette, density, noise } = opts;
+  const bayer = [
+    [ 0,32, 8,40, 2,34,10,42],
+    [48,16,56,24,50,18,58,26],
+    [12,44, 4,36,14,46, 6,38],
+    [60,28,52,20,62,30,54,22],
+    [ 3,35,11,43, 1,33, 9,41],
+    [51,19,59,27,49,17,57,25],
+    [15,47, 7,39,13,45, 5,37],
+    [63,31,55,23,61,29,53,21],
+  ];
+  const img = ctx.createImageData(w, h);
+  const data = img.data;
+  const pixSize = Math.max(2, Math.round((w / 500) * (1 + (100 - density) / 30)));
+  const scale = 0.003;
+  for (let y = 0; y < h; y += pixSize) {
+    for (let x = 0; x < w; x += pixSize) {
+      const n = (noise.fbm(x * scale, y * scale, 3) + 1) * 0.5;
+      const thr = bayer[((y / pixSize) | 0) % 8][((x / pixSize) | 0) % 8] / 64;
+      const t = Math.max(0, Math.min(0.999, n + (thr - 0.5) * 0.18));
+      const c = paletteRgb(palette, t);
+      const r = c[0] | 0, g = c[1] | 0, b = c[2] | 0;
+      for (let dy = 0; dy < pixSize && y + dy < h; dy++) {
+        for (let dx = 0; dx < pixSize && x + dx < w; dx++) {
+          const idx = ((y + dy) * w + (x + dx)) * 4;
+          data[idx] = r; data[idx + 1] = g; data[idx + 2] = b; data[idx + 3] = 255;
         }
-      } catch (e) { /* keep last value */ }
+      }
     }
-
-    requestAnimationFrame(render);
   }
+  ctx.putImageData(img, 0, 0);
+}
 
-  function compassLabel(d) {
-    const dirs = ['N','NE','E','SE','S','SW','W','NW'];
-    return dirs[Math.round(d / 45) % 8];
-  }
+const ALGOS = { flow: flowField, voronoi, mandala, plasma, tiles, dither };
 
-  // --- Boot -----------------------------------------------------------------
-  startBtn.addEventListener('click', async () => {
-    startBtn.disabled = true;
-    startBtn.textContent = 'Loading…';
-    showErr('');
-    try {
-      await requestOrientationPerm();
-      await startCamera();
-      setStatus('Getting location…');
-      observer = await getLocation();
-      setStatus('Loading orbit data…');
-      await fetchTLE();
-      setStatus('Tracking ISS');
+// ---------- State ----------
+const state = {
+  style: 'flow',
+  paletteName: 'sunset',
+  density: 50,
+  aspect: '1:1',
+  seed: (Math.random() * 1e9) | 0,
+};
 
-      window.addEventListener('deviceorientation', handleOrientation, true);
-      // Some iOS need the absolute variant
-      window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+function aspectDims(aspect, longSide) {
+  const [a, b] = aspect.split(':').map(Number);
+  if (a >= b) return { w: longSide, h: Math.round(longSide * b / a) };
+  return { w: Math.round(longSide * a / b), h: longSide };
+}
 
-      startEl.classList.add('hidden');
-      resizeSky();   // size canvas to viewport after start screen is hidden
-      requestAnimationFrame(render);
-    } catch (e) {
-      startBtn.disabled = false;
-      startBtn.textContent = 'Try Again';
-      showErr(e.message || String(e));
-      setStatus('Error', 'err');
-    }
+function renderTo(canvas, longSide) {
+  const { w, h } = aspectDims(state.aspect, longSide);
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, w, h);
+  const rng = mulberry32(state.seed);
+  const noise = new Noise(rng);
+  const palette = PALETTES[state.paletteName];
+  ALGOS[state.style](ctx, { w, h, palette, density: state.density, rng, noise });
+}
+
+function renderPreview() {
+  const c = document.getElementById('preview');
+  const wrapW = window.innerWidth - (window.innerWidth > 880 ? 380 : 32);
+  const wrapH = window.innerHeight - (window.innerWidth > 880 ? 60 : 80);
+  const longSide = Math.max(540, Math.min(1400, Math.min(wrapW, wrapH * (state.aspect === '16:9' ? 16/9 : 1.4))));
+  renderTo(c, longSide | 0);
+  document.getElementById('seed-info').textContent =
+    `seed ${state.seed} · ${state.style} · ${state.paletteName} · ${state.aspect}`;
+}
+
+function downloadHighRes() {
+  const busy = document.getElementById('busy');
+  busy.classList.add('on');
+  setTimeout(() => {
+    const c = document.createElement('canvas');
+    renderTo(c, 3840);
+    c.toBlob((blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `print-${state.style}-${state.paletteName}-${state.seed}.png`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      busy.classList.remove('on');
+    }, 'image/png');
+  }, 30);
+}
+
+function saveToGallery() {
+  const c = document.createElement('canvas');
+  renderTo(c, 360);
+  const thumb = c.toDataURL('image/jpeg', 0.72);
+  const items = JSON.parse(localStorage.getItem('gallery') || '[]');
+  items.unshift({
+    style: state.style,
+    paletteName: state.paletteName,
+    density: state.density,
+    aspect: state.aspect,
+    seed: state.seed,
+    thumb,
   });
-})();
+  if (items.length > 18) items.length = 18;
+  localStorage.setItem('gallery', JSON.stringify(items));
+  renderGallery();
+}
+
+function renderGallery() {
+  const g = document.getElementById('gallery');
+  const items = JSON.parse(localStorage.getItem('gallery') || '[]');
+  g.innerHTML = '';
+  if (!items.length) {
+    const e = document.createElement('div');
+    e.className = 'empty';
+    e.textContent = 'No saved prints yet.';
+    g.appendChild(e);
+    return;
+  }
+  items.forEach((it) => {
+    const div = document.createElement('div');
+    div.className = 'thumb';
+    div.style.backgroundImage = `url(${it.thumb})`;
+    div.title = `${it.style} · ${it.paletteName} (click to load)`;
+    div.addEventListener('click', () => {
+      state.style = it.style;
+      state.paletteName = it.paletteName;
+      state.density = it.density;
+      state.aspect = it.aspect;
+      state.seed = it.seed;
+      syncUI(); renderPreview();
+    });
+    g.appendChild(div);
+  });
+}
+
+function syncUI() {
+  document.querySelectorAll('#styles .btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.style === state.style);
+  });
+  document.querySelectorAll('#aspects .btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.aspect === state.aspect);
+  });
+  document.querySelectorAll('#palettes .swatch').forEach(s => {
+    s.classList.toggle('active', s.dataset.palette === state.paletteName);
+  });
+  document.getElementById('density').value = state.density;
+  document.getElementById('densityVal').textContent = state.density;
+}
+
+function buildPalettes() {
+  const wrap = document.getElementById('palettes');
+  Object.entries(PALETTES).forEach(([name, cols]) => {
+    const s = document.createElement('div');
+    s.className = 'swatch';
+    s.dataset.palette = name;
+    s.title = name;
+    cols.forEach((c) => {
+      const st = document.createElement('div');
+      st.className = 'stripe';
+      st.style.background = c;
+      s.appendChild(st);
+    });
+    s.addEventListener('click', () => {
+      state.paletteName = name;
+      syncUI(); renderPreview();
+    });
+    wrap.appendChild(s);
+  });
+}
+
+function init() {
+  buildPalettes();
+  syncUI();
+  document.querySelectorAll('#styles .btn').forEach(b => {
+    b.addEventListener('click', () => {
+      state.style = b.dataset.style;
+      state.seed = (Math.random() * 1e9) | 0;
+      syncUI(); renderPreview();
+    });
+  });
+  document.querySelectorAll('#aspects .btn').forEach(b => {
+    b.addEventListener('click', () => {
+      state.aspect = b.dataset.aspect;
+      syncUI(); renderPreview();
+    });
+  });
+  const dens = document.getElementById('density');
+  let densTimer;
+  dens.addEventListener('input', () => {
+    state.density = +dens.value;
+    document.getElementById('densityVal').textContent = state.density;
+    clearTimeout(densTimer);
+    densTimer = setTimeout(renderPreview, 60);
+  });
+  document.getElementById('regen').addEventListener('click', () => {
+    state.seed = (Math.random() * 1e9) | 0;
+    renderPreview();
+  });
+  document.getElementById('save').addEventListener('click', saveToGallery);
+  document.getElementById('download').addEventListener('click', downloadHighRes);
+  document.getElementById('preview').addEventListener('click', () => {
+    state.seed = (Math.random() * 1e9) | 0;
+    renderPreview();
+  });
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(renderPreview, 100);
+  });
+  renderGallery();
+  renderPreview();
+}
+
+init();
 </script>
 </body>
 </html>
