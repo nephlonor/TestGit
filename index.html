@@ -1,763 +1,711 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#0a0a0f" />
-<title>Print Studio — Generative Art Prints</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0A2540">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GCCB">
+<link rel="manifest" href="manifest.webmanifest?v=29">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=29">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=29">
+<title>GCCB Shot Tracker</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin="" defer></script>
 <style>
   :root {
-    --bg: #0a0a0f;
-    --panel: #14141d;
-    --panel-2: #1c1c2a;
-    --line: #2a2a3a;
-    --text: #e8e8f0;
-    --muted: #8b8ba0;
-    --accent: #ffd23f;
-    --accent-2: #ee4266;
+    --bg: #0A2540;
+    --bg-elev: #0e2c4d;
+    --bg-input: #0e2c4d;
+    --line: #1e406b;
+    --text: #ffffff;
+    --muted: #a8b6cc;
+    --accent: #B3A16E;
   }
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
-    margin: 0; padding: 0;
+    margin: 0;
+    padding: 0;
     background: var(--bg);
     color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
-    min-height: 100vh;
-    overscroll-behavior: none;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
-  .app {
-    display: grid;
-    grid-template-columns: 340px 1fr;
+  body {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     min-height: 100vh;
   }
-  @media (max-width: 880px) {
-    .app { grid-template-columns: 1fr; }
-  }
-  aside.controls {
-    background: var(--panel);
-    border-right: 1px solid var(--line);
-    padding: 22px 20px 32px;
-    overflow-y: auto;
-    max-height: 100vh;
-  }
-  main.canvas-wrap {
+  header {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 28px;
-    background: radial-gradient(ellipse at center, #1a1a25 0%, #06060a 75%);
-    min-height: 60vh;
-    position: relative;
+    gap: 10px;
+    padding: 10px 12px 6px;
   }
-  canvas#preview {
-    max-width: 100%;
-    max-height: calc(100vh - 60px);
-    box-shadow: 0 25px 70px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.08);
-    border-radius: 4px;
-    background: #000;
-    cursor: pointer;
-  }
-  h1 {
-    font-size: 19px; margin: 0 0 4px;
-    letter-spacing: 0.3px;
-    display: flex; align-items: center; gap: 8px;
-  }
-  h1 .dot {
-    width: 10px; height: 10px; border-radius: 50%;
-    background: linear-gradient(135deg, var(--accent), var(--accent-2));
-    box-shadow: 0 0 12px var(--accent-2);
-  }
-  .tagline { color: var(--muted); font-size: 12.5px; margin: 0 0 22px; line-height: 1.5; }
-  .group { margin: 0 0 16px; }
-  .group label.heading {
-    display: block;
-    font-size: 10.5px;
-    letter-spacing: 1.6px;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin: 0 0 8px;
-    font-weight: 600;
-  }
-  .btns { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
-  .btns.three { grid-template-columns: repeat(3, 1fr); }
-  .btn {
-    background: var(--panel-2);
+  header img { height: 64px; width: auto; display: block; }
+
+  /* Install / Add-to-Home-Screen prompt */
+  #installPrompt {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 0 12px 8px;
+    padding: 8px 12px;
+    background: var(--bg-elev);
     border: 1px solid var(--line);
-    color: var(--text);
-    padding: 9px 11px;
-    font-size: 12.5px;
-    border-radius: 8px;
-    cursor: pointer;
-    text-align: center;
-    transition: all 0.12s;
-    font-family: inherit;
+    border-radius: 10px;
+    font-size: 13px;
+    color: var(--muted);
   }
-  .btn:hover { background: #252535; border-color: #3a3a4a; }
-  .btn.active {
-    background: linear-gradient(180deg, var(--accent), #f4b400);
-    color: #0a0a0f;
-    border-color: transparent;
+  #installPrompt[hidden] { display: none; }
+  #installPrompt .msg { flex: 1; line-height: 1.35; }
+  #installPrompt .msg b { color: var(--text); font-weight: 700; }
+  #installPrompt #installBtn {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  #installPrompt #installDismiss {
+    background: transparent;
+    color: var(--muted);
+    border: none;
+    font-size: 20px;
+    line-height: 1;
+    padding: 0 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  header h1 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: 0.5px;
+  }
+  .hole-nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .hole-nav-btn {
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 28px;
+    line-height: 1;
+    font-weight: 700;
+    padding: 0 6px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .hole-nav-btn:disabled { opacity: 0.3; }
+  .hole-select-wrap {
+    flex: 1;
+    position: relative;
+  }
+  select#holeSelect {
+    width: 100%;
+    background: transparent;
+    color: var(--text);
+    border: none;
+    padding: 0 14px 0 0;
+    font-size: 22px;
+    font-weight: 700;
+    appearance: none;
+    -webkit-appearance: none;
+    text-align: center;
+    text-align-last: center;
+    line-height: 1;
+  }
+  .hole-select-wrap::after {
+    content: "▾";
+    position: absolute;
+    right: 0; top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .nine-tabs {
+    display: flex;
+    gap: 6px;
+    padding: 0 12px 8px;
+  }
+  .nine-tabs button {
+    flex: 1;
+    background: var(--bg-input);
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px;
+    font-size: 13px;
     font-weight: 600;
   }
-  .swatches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-  .swatch {
-    aspect-ratio: 1;
-    border-radius: 8px;
-    border: 2px solid transparent;
+  .nine-tabs button.active {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+  }
+  .hole-grid {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 6px;
+    padding: 0 12px 10px;
+    justify-items: center;
+  }
+  .hole-grid button {
+    background: var(--bg-input);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    aspect-ratio: 1 / 1;
+    width: 100%;
+    max-width: 36px;
+    padding: 0;
+    font-size: 14px;
+    font-weight: 600;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .hole-grid button.active {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+  }
+  .info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--bg-elev);
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap;
+  }
+  .info-row label {
+    font-size: 13px;
+    color: var(--muted);
+    margin-right: 6px;
+  }
+  .info-row select {
+    background: var(--bg-input);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .info-row option[value="RED"] { color: #ff5252; }
+  .info-row option[value="BLUE"] { color: #87CEFA; }
+  .info-row option[value="YELLOW"] { color: gold; }
+  .info-row option[value="WHITE"] { color: #fff; }
+  #teeboxSelect option[value="RED"] { color: #ff5252; }
+  #teeboxSelect option[value="BLUE"] { color: #87CEFA; }
+  #teeboxSelect option[value="YELLOW"] { color: gold; }
+  #teeboxSelect option[value="WHITE"] { color: #fff; }
+  .mode-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .switch {
     position: relative;
-    overflow: hidden;
+    display: inline-block;
+    width: 46px;
+    height: 26px;
+  }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0;
+    background: #4a6789;
+    border-radius: 26px;
+    transition: 0.2s;
+    cursor: pointer;
+  }
+  .slider:before {
+    content: "";
+    position: absolute;
+    left: 3px; bottom: 3px;
+    width: 20px; height: 20px;
+    background: #fff;
+    border-radius: 50%;
+    transition: 0.2s;
+  }
+  input:checked + .slider { background: var(--accent); }
+  input:checked + .slider:before { transform: translateX(20px); }
+  .clear-btn {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+  .canvas-wrap {
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    gap: 14px;
+    padding: 12px;
+  }
+  #canvas {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    width: min(calc((100vw - 24px) / 2), 180px);
+    height: auto;
+    aspect-ratio: 210 / 700;
+    display: block;
+    flex-shrink: 0;
+    /* single-finger gestures handled in JS (drag); two-finger pinch
+       still drives page zoom */
+    touch-action: pinch-zoom;
+  }
+  .hole-info {
+    flex: 1;
+    max-width: 180px;
     display: flex;
     flex-direction: column;
+    gap: 18px;
+    padding-top: 4px;
   }
-  .swatch.active {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 2px rgba(255,210,63,0.25);
+  .hole-info .row {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 10px;
   }
-  .swatch .stripe { flex: 1; }
-  input[type=range] {
-    width: 100%;
-    -webkit-appearance: none;
-    appearance: none;
-    height: 4px;
-    background: var(--line);
-    border-radius: 2px;
-    outline: none;
-    margin: 6px 0 2px;
-  }
-  input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 16px; height: 16px;
-    background: var(--accent);
-    border-radius: 50%;
-    cursor: pointer;
-    border: 0;
-  }
-  input[type=range]::-moz-range-thumb {
-    width: 16px; height: 16px;
-    background: var(--accent);
-    border-radius: 50%;
-    cursor: pointer;
-    border: 0;
-  }
-  .val { font-size: 11px; color: var(--muted); float: right; }
-  .big {
-    width: 100%;
-    padding: 13px;
-    border: 0;
-    border-radius: 10px;
-    cursor: pointer;
-    font-weight: 600;
+  .hole-info .lbl {
+    color: var(--muted);
     font-size: 14px;
-    font-family: inherit;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
   }
-  .big.primary {
-    background: linear-gradient(180deg, var(--accent), #f4b400);
-    color: #0a0a0f;
-  }
-  .big.primary:hover { filter: brightness(1.06); }
-  .big.secondary {
-    background: var(--panel-2);
+  .hole-info .val {
     color: var(--text);
-    border: 1px solid var(--line);
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1;
   }
-  .big.secondary:hover { background: #252535; }
-  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
-  .stat { font-size: 11px; color: var(--muted); margin: 10px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-  #gallery {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 6px;
-    margin-top: 6px;
+  .hole-info .val .sub {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 500;
+    margin-left: 4px;
+    white-space: nowrap;
   }
-  #gallery .thumb {
-    aspect-ratio: 1;
-    border-radius: 6px;
+  .hole-video {
+    padding: 0 12px 12px;
+  }
+  .hole-video .embed {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #000;
+    border-radius: 10px;
     overflow: hidden;
-    cursor: pointer;
     border: 1px solid var(--line);
-    background-size: cover;
-    background-position: center;
-    transition: transform 0.12s;
   }
-  #gallery .thumb:hover { transform: scale(1.06); border-color: var(--accent); }
-  #gallery .empty { grid-column: 1/-1; color: var(--muted); font-size: 11.5px; padding: 8px 2px; }
-  #busy {
-    position: absolute; inset: 0;
-    background: rgba(6,6,10,0.7);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    color: var(--text);
-    font-size: 13px;
-    backdrop-filter: blur(2px);
-    z-index: 10;
+  .hole-video iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
   }
-  #busy.on { display: flex; }
-  .spinner {
-    width: 28px; height: 28px;
-    border: 3px solid rgba(255,255,255,0.15);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin-right: 10px;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .hint {
+  .page-footer {
     text-align: center;
     color: var(--muted);
     font-size: 11px;
-    margin-top: 14px;
+    line-height: 1.6;
+    padding: 8px 12px 20px;
   }
-  @media (max-width: 880px) {
-    aside.controls { order: 2; max-height: none; border-right: 0; border-top: 1px solid var(--line); }
-    main.canvas-wrap { order: 1; padding: 16px; }
-    canvas#preview { max-height: 70vh; }
+  .page-footer img {
+    height: 56px;
+    width: auto;
+    display: block;
+    margin: 0 auto 12px;
+  }
+  .hole-info .row.inline {
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .hole-info select {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 4px 8px;
+    font-size: 14px;
+    font-weight: 600;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  .hole-info .notes {
+    flex: 1;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    min-height: 0;
+  }
+  .hole-info textarea {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 14px;
+    font-family: inherit;
+    line-height: 1.35;
+    width: 100%;
+    flex: 1;
+    min-height: 64px;
+    resize: none;
+    outline: none;
+  }
+  .hole-info textarea:focus { border-color: var(--accent); }
+  .hole-info textarea::placeholder { color: var(--muted); opacity: 0.6; }
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 11px;
+    padding: 6px 12px 16px;
+    line-height: 1.5;
+  }
+
+  /* GPS bar */
+  .gps-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 12px 8px;
+    padding: 8px 10px;
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .gps-bar .gps-status {
+    flex: 1;
+    line-height: 1.3;
+    min-width: 0;
+  }
+  .gps-bar button {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .gps-bar button.on {
+    background: #007aff;
+    border-color: #007aff;
+    color: #fff;
+  }
+  .gps-bar #gpsToggleBtn::before {
+    content: "●";
+    color: #6a7b94;
+    margin-right: 4px;
+    font-size: 10px;
+    vertical-align: 1px;
+  }
+  .gps-bar #gpsToggleBtn.on::before {
+    color: #fff;
+    text-shadow: 0 0 4px rgba(255,255,255,0.6);
+  }
+
+  /* Calibration modal */
+  #calModal {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 37, 64, 0.92);
+    z-index: 1100;
+    display: flex;
+    flex-direction: column;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  #calModal[hidden] { display: none; }
+  #calModal .cal-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  #calModal h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+    flex: 1;
+  }
+  #calModal .cal-header select {
+    background: var(--bg-input);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  #calModal button.icon {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  #calModal .cal-body {
+    flex: 1;
+    position: relative;
+    min-height: 200px;
+  }
+  #calMap {
+    position: absolute;
+    inset: 0;
+  }
+  #calModal .cal-help {
+    padding: 8px 12px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  #calModal .cal-help b { color: var(--text); }
+  #calModal .cal-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--line);
+    background: var(--bg-elev);
+  }
+  #calModal .cal-footer button {
+    flex: 1 1 auto;
+    background: var(--bg-input);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    min-width: 120px;
+  }
+  #calModal .cal-footer button.primary {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+  }
+  #calModal .cal-footer button.danger {
+    color: #ff6b6b;
+  }
+  .cal-pin {
+    pointer-events: auto;
+  }
+  .cal-pin-dot {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid #000;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  }
+  .cal-pin-label {
+    position: absolute;
+    top: 22px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.78);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  /* First-visit welcome modal */
+  #welcomeModal {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(10, 37, 64, 0.78);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 1000;
+    padding: 20px;
+  }
+  #welcomeModal[hidden] { display: none; }
+  #welcomeModal .modal-card {
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 22px 20px 18px;
+    max-width: 340px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  }
+  #welcomeModal img {
+    height: 48px;
+    width: auto;
+    margin-bottom: 12px;
+  }
+  #welcomeModal p {
+    color: var(--text);
+    font-size: 15px;
+    line-height: 1.4;
+    margin: 0 0 18px;
+  }
+  #welcomeModal button {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    border-radius: 10px;
+    padding: 12px 22px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    min-width: 120px;
   }
 </style>
 </head>
 <body>
-<div class="app">
-  <aside class="controls">
-    <h1><span class="dot"></span>Print Studio</h1>
-    <p class="tagline">Generate unique high-resolution art prints. Click the canvas to remix. Save favorites. Download in 4K — yours to keep, hang, or list.</p>
 
-    <div class="group">
-      <label class="heading">Style</label>
-      <div class="btns three" id="styles">
-        <button class="btn active" data-style="flow">Flow</button>
-        <button class="btn" data-style="voronoi">Voronoi</button>
-        <button class="btn" data-style="mandala">Mandala</button>
-        <button class="btn" data-style="plasma">Plasma</button>
-        <button class="btn" data-style="tiles">Tiles</button>
-        <button class="btn" data-style="dither">Dither</button>
-      </div>
-    </div>
+<header>
+  <img src="assets/logo.png?v=29" alt="GCCB">
+</header>
 
-    <div class="group">
-      <label class="heading">Palette</label>
-      <div class="swatches" id="palettes"></div>
-    </div>
-
-    <div class="group">
-      <label class="heading">Density <span class="val" id="densityVal">50</span></label>
-      <input type="range" id="density" min="1" max="100" value="50" />
-    </div>
-
-    <div class="group">
-      <label class="heading">Aspect</label>
-      <div class="btns" id="aspects">
-        <button class="btn active" data-aspect="1:1">Square</button>
-        <button class="btn" data-aspect="4:5">Print 4:5</button>
-        <button class="btn" data-aspect="2:3">Poster</button>
-        <button class="btn" data-aspect="16:9">Wide</button>
-      </div>
-    </div>
-
-    <div class="group" style="margin-top: 22px">
-      <button class="big primary" id="regen">Regenerate</button>
-    </div>
-    <div class="row">
-      <button class="big secondary" id="save">Save</button>
-      <button class="big secondary" id="download">Download 4K</button>
-    </div>
-    <p class="stat" id="seed-info"></p>
-
-    <div class="group" style="margin-top: 22px">
-      <label class="heading">Saved Prints</label>
-      <div id="gallery"></div>
-    </div>
-
-    <p class="hint">Tip: tap the canvas for a new seed</p>
-  </aside>
-
-  <main class="canvas-wrap">
-    <canvas id="preview"></canvas>
-    <div id="busy"><div class="spinner"></div>Rendering 4K…</div>
-  </main>
+<div class="gps-bar">
+  <span class="gps-status" id="gpsStatus">GPS off</span>
+  <button id="gpsRefreshBtn" type="button" title="Refresh GPS now" aria-label="Refresh GPS">↻</button>
+  <button id="gpsToggleBtn" type="button">GPS</button>
+  <button id="calibrateBtn" type="button">Map</button>
 </div>
 
-<script>
-'use strict';
+<div id="installPrompt" hidden>
+  <span class="msg" id="installMsg"></span>
+  <button id="installBtn" type="button" hidden>Install</button>
+  <button id="installDismiss" type="button" aria-label="Dismiss">×</button>
+</div>
 
-// ---------- PRNG ----------
-function mulberry32(seed) {
-  let s = seed >>> 0;
-  return function() {
-    s = (s + 0x6D2B79F5) | 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+<div class="nine-tabs" id="nineTabs">
+  <button data-nine="front" class="active">Front 9 (1–9)</button>
+  <button data-nine="back">Back 9 (10–18)</button>
+</div>
 
-// ---------- Perlin noise ----------
-class Noise {
-  constructor(rng) {
-    const perm = new Uint8Array(256);
-    for (let i = 0; i < 256; i++) perm[i] = i;
-    for (let i = 255; i > 0; i--) {
-      const j = Math.floor(rng() * (i + 1));
-      const t = perm[i]; perm[i] = perm[j]; perm[j] = t;
-    }
-    this.p = new Uint8Array(512);
-    for (let i = 0; i < 512; i++) this.p[i] = perm[i & 255];
-  }
-  fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
-  lerp(a, b, t) { return a + t * (b - a); }
-  grad(hash, x, y) {
-    const h = hash & 7;
-    const u = h < 4 ? x : y;
-    const v = h < 4 ? y : x;
-    return ((h & 1) ? -u : u) + ((h & 2) ? -2 * v : 2 * v);
-  }
-  noise2(x, y) {
-    const X = Math.floor(x) & 255;
-    const Y = Math.floor(y) & 255;
-    x -= Math.floor(x); y -= Math.floor(y);
-    const u = this.fade(x), v = this.fade(y);
-    const A = this.p[X] + Y, B = this.p[X + 1] + Y;
-    return this.lerp(
-      this.lerp(this.grad(this.p[A], x, y), this.grad(this.p[B], x - 1, y), u),
-      this.lerp(this.grad(this.p[A + 1], x, y - 1), this.grad(this.p[B + 1], x - 1, y - 1), u),
-      v
-    );
-  }
-  fbm(x, y, octaves) {
-    let v = 0, amp = 1, freq = 1, max = 0;
-    for (let i = 0; i < octaves; i++) {
-      v += amp * this.noise2(x * freq, y * freq);
-      max += amp; amp *= 0.5; freq *= 2;
-    }
-    return v / max;
-  }
-}
+<div class="hole-grid" id="holeGrid"></div>
 
-// ---------- Palettes ----------
-const PALETTES = {
-  sunset:    ['#fde7c1','#f8b878','#ef7b45','#cf3759','#5c0e62'],
-  ocean:     ['#caf0f8','#90e0ef','#00b4d8','#0077b6','#03045e'],
-  forest:    ['#dad7cd','#a3b18a','#588157','#3a5a40','#1f2e23'],
-  neon:      ['#ffbe0b','#fb5607','#ff006e','#8338ec','#3a86ff'],
-  vaporwave: ['#fffb96','#05ffa1','#01cdfe','#b967ff','#ff71ce'],
-  mono:      ['#f5f5f5','#bbbbbb','#7a7a7a','#3a3a3a','#0a0a0a'],
-  pastel:    ['#ffaebc','#ffd6e0','#ffefcf','#d4f0f0','#a0c4ff'],
-  fire:      ['#fff3b0','#ffd60a','#ff9500','#e63946','#5b0a0a'],
-  earth:     ['#f1ddc4','#d6a77a','#a26a4b','#6b4226','#2b1a10'],
-  cyber:     ['#f7e733','#05d9e8','#ff2a6d','#7a04eb','#0d0221'],
-  twilight:  ['#f9e4d4','#e6a4b4','#7474bf','#302b63','#0f0c29'],
-  desert:    ['#f6bd60','#f7ede2','#f5cac3','#84a59d','#34495e'],
-};
+<div class="canvas-wrap">
+  <canvas id="canvas" width="840" height="2800"></canvas>
+  <aside class="hole-info" id="holeInfo">
+    <div class="hole-nav">
+      <button class="hole-nav-btn" id="prevBtn" aria-label="Previous hole">‹</button>
+      <div class="hole-select-wrap">
+        <select id="holeSelect"></select>
+      </div>
+      <button class="hole-nav-btn" id="nextBtn" aria-label="Next hole">›</button>
+    </div>
+    <div class="row"><span class="lbl">Par</span><span class="val" id="parVal">—</span></div>
+    <div class="row"><span class="lbl">Meters</span><span class="val" id="distVal">—</span></div>
+    <div class="row"><span class="lbl">HCP</span><span class="val" id="hcpVal">—</span></div>
+    <div class="row inline">
+      <span class="lbl">Point-to-point</span>
+      <label class="switch">
+        <input type="checkbox" id="measurementMode">
+        <span class="slider round"></span>
+      </label>
+    </div>
+    <div class="row inline">
+      <label class="lbl" for="teeboxSelect">Teebox</label>
+      <select id="teeboxSelect">
+        <option value="RED">53 (RED)</option>
+        <option value="BLUE">55 (BLUE)</option>
+        <option value="YELLOW">59 (YELLOW)</option>
+        <option value="WHITE" selected>62 (WHITE)</option>
+      </select>
+    </div>
+    <div class="row notes">
+      <label class="lbl" for="notesArea">Notes</label>
+      <textarea id="notesArea" rows="4"></textarea>
+    </div>
+  </aside>
+</div>
 
-// ---------- Color helpers ----------
-function hexToRgb(h) {
-  const v = parseInt(h.slice(1), 16);
-  return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
-}
-function lerpRgb(a, b, t) {
-  return [
-    a[0] + (b[0] - a[0]) * t,
-    a[1] + (b[1] - a[1]) * t,
-    a[2] + (b[2] - a[2]) * t,
-  ];
-}
-function paletteRgb(palette, t) {
-  t = Math.max(0, Math.min(0.999999, t));
-  const seg = t * (palette.length - 1);
-  const i = Math.floor(seg);
-  const a = hexToRgb(palette[i]);
-  const b = hexToRgb(palette[i + 1]);
-  return lerpRgb(a, b, seg - i);
-}
-function paletteCss(palette, t) {
-  const c = paletteRgb(palette, t);
-  return `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
-}
-function paletteCssA(palette, t, alpha) {
-  const c = paletteRgb(palette, t);
-  return `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${alpha})`;
-}
+<div class="hole-video">
+  <div class="embed">
+    <iframe id="holeVideo" src="" title="Hole video"
+            allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+  </div>
+</div>
 
-// ---------- Algorithms ----------
-function background(ctx, w, h, palette) {
-  ctx.fillStyle = palette[palette.length - 1];
-  ctx.fillRect(0, 0, w, h);
-}
+<div class="page-footer">
+  <img src="assets/logo.png?v=29" alt="GCCB">
+  © Golf &amp; Country Club Basel<br>
+  by Florian Bertram<br>
+  2026
+</div>
 
-function flowField(ctx, opts) {
-  const { w, h, palette, density, rng, noise } = opts;
-  background(ctx, w, h, palette);
-  const particles = Math.floor(120 + density * 6);
-  const steps = 220;
-  const baseScale = 0.0022;
-  const swirl = 1.8 + (density / 100) * 2;
-  ctx.lineCap = 'round';
-  const baseWidth = Math.max(0.4, (w / 1400) * 1.4);
-  for (let p = 0; p < particles; p++) {
-    let x = rng() * w, y = rng() * h;
-    const t = rng();
-    const col = paletteCssA(palette, t, 0.55);
-    ctx.strokeStyle = col;
-    ctx.lineWidth = baseWidth * (0.5 + rng() * 1.6);
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    for (let s = 0; s < steps; s++) {
-      const n = noise.fbm(x * baseScale, y * baseScale, 3);
-      const a = n * Math.PI * swirl;
-      x += Math.cos(a) * 1.6;
-      y += Math.sin(a) * 1.6;
-      if (x < -10 || y < -10 || x > w + 10 || y > h + 10) break;
-      ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-  }
-}
+<div id="welcomeModal" hidden role="dialog" aria-modal="true" aria-labelledby="welcomeText">
+  <div class="modal-card">
+    <img src="assets/logo.png?v=29" alt="GCCB">
+    <p id="welcomeText">Tap the fairway to measure shots. The blue dot is your GPS position — open <b>Map</b> to calibrate each hole by placing the green and white-tee pins on OpenStreetMap.</p>
+    <button id="welcomeOk" type="button">Got it</button>
+  </div>
+</div>
 
-function plasma(ctx, opts) {
-  const { w, h, palette, density, noise } = opts;
-  const img = ctx.createImageData(w, h);
-  const data = img.data;
-  const scale = 0.0015 + (101 - density) * 0.00006;
-  const oct = 3 + Math.round(density / 25);
-  let i = 0;
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const n = (noise.fbm(x * scale, y * scale, oct) + 1) * 0.5;
-      const c = paletteRgb(palette, n);
-      data[i++] = c[0] | 0; data[i++] = c[1] | 0; data[i++] = c[2] | 0; data[i++] = 255;
-    }
-  }
-  ctx.putImageData(img, 0, 0);
-}
+<div id="calModal" hidden role="dialog" aria-modal="true" aria-label="OSM calibration">
+  <div class="cal-header">
+    <h2>Map calibration</h2>
+    <select id="calHoleSelect" aria-label="Hole"></select>
+    <button id="calCloseBtn" class="icon" type="button" aria-label="Close">✕</button>
+  </div>
+  <div class="cal-help">
+    Drag the <b>green</b> pin onto the middle of the green and the <b>white</b> pin onto the white teebox of the selected hole. Save to lock in the mapping for that hole.
+  </div>
+  <div class="cal-body">
+    <div id="calMap"></div>
+  </div>
+  <div class="cal-footer">
+    <button id="calUseGpsGreen" type="button">Green = my GPS</button>
+    <button id="calUseGpsWhite" type="button">White tee = my GPS</button>
+    <button id="calClearBtn" class="danger" type="button">Clear hole</button>
+    <button id="calSaveBtn" class="primary" type="button">Save</button>
+  </div>
+</div>
 
-function voronoi(ctx, opts) {
-  const { w, h, palette, density, rng } = opts;
-  const count = Math.floor(25 + density * 2);
-  const pts = [];
-  for (let i = 0; i < count; i++) {
-    pts.push({ x: rng() * w, y: rng() * h, t: rng() });
-  }
-  const img = ctx.createImageData(w, h);
-  const data = img.data;
-  const step = Math.max(1, Math.floor(w / 1100));
-  for (let y = 0; y < h; y += step) {
-    for (let x = 0; x < w; x += step) {
-      let bd = Infinity, bp = pts[0];
-      for (let i = 0; i < count; i++) {
-        const dx = pts[i].x - x, dy = pts[i].y - y;
-        const d = dx * dx + dy * dy;
-        if (d < bd) { bd = d; bp = pts[i]; }
-      }
-      const c = paletteRgb(palette, bp.t);
-      const sd = Math.min(1, Math.sqrt(bd) / (Math.min(w, h) * 0.18));
-      const sh = 0.65 + 0.35 * (1 - sd);
-      const r = (c[0] * sh) | 0, g = (c[1] * sh) | 0, b = (c[2] * sh) | 0;
-      for (let dy = 0; dy < step && y + dy < h; dy++) {
-        for (let dx = 0; dx < step && x + dx < w; dx++) {
-          const idx = ((y + dy) * w + (x + dx)) * 4;
-          data[idx] = r; data[idx + 1] = g; data[idx + 2] = b; data[idx + 3] = 255;
-        }
-      }
-    }
-  }
-  ctx.putImageData(img, 0, 0);
-}
-
-function mandala(ctx, opts) {
-  const { w, h, palette, density, rng } = opts;
-  background(ctx, w, h, palette);
-  ctx.save();
-  ctx.translate(w / 2, h / 2);
-  const symmetry = 6 + Math.floor(rng() * 7);
-  const rings = 5 + Math.floor(density / 11);
-  const maxR = Math.min(w, h) * 0.48;
-  for (let ring = 0; ring < rings; ring++) {
-    const r0 = (ring / rings) * maxR;
-    const r1 = ((ring + 1) / rings) * maxR;
-    const subdiv = 2 + Math.floor(rng() * 4);
-    const segs = symmetry * subdiv;
-    const colA = rng();
-    const colB = rng();
-    for (let s = 0; s < segs; s++) {
-      const a0 = (s / segs) * Math.PI * 2;
-      const a1 = ((s + 1) / segs) * Math.PI * 2;
-      ctx.beginPath();
-      ctx.arc(0, 0, r1, a0, a1);
-      ctx.arc(0, 0, r0, a1, a0, true);
-      ctx.closePath();
-      ctx.fillStyle = paletteCssA(palette, (s % 2 === 0) ? colA : colB, 0.85);
-      ctx.fill();
-    }
-    if (rng() > 0.35) {
-      const dotR = (r1 - r0) * (0.12 + rng() * 0.18);
-      const midR = (r0 + r1) / 2;
-      const dots = symmetry * (rng() > 0.5 ? 1 : 2);
-      ctx.fillStyle = paletteCss(palette, rng());
-      for (let d = 0; d < dots; d++) {
-        const a = (d / dots) * Math.PI * 2;
-        ctx.beginPath();
-        ctx.arc(Math.cos(a) * midR, Math.sin(a) * midR, dotR, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  }
-  ctx.restore();
-}
-
-function tiles(ctx, opts) {
-  const { w, h, palette, density, rng } = opts;
-  background(ctx, w, h, palette);
-  const cols = 5 + Math.floor(density / 8);
-  const rows = Math.max(1, Math.floor(cols * h / w));
-  const cw = w / cols, ch = h / rows;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const x = c * cw, y = r * ch;
-      const base = paletteCss(palette, rng());
-      ctx.fillStyle = base;
-      ctx.fillRect(x, y, cw + 1, ch + 1);
-      const choice = rng();
-      ctx.fillStyle = paletteCss(palette, rng());
-      ctx.beginPath();
-      if (choice < 0.25) {
-        ctx.moveTo(x, y); ctx.lineTo(x + cw, y); ctx.lineTo(x + cw, y + ch);
-        ctx.closePath(); ctx.fill();
-      } else if (choice < 0.5) {
-        ctx.arc(x + cw / 2, y + ch / 2, Math.min(cw, ch) * 0.42, 0, Math.PI * 2);
-        ctx.fill();
-      } else if (choice < 0.75) {
-        ctx.moveTo(x + cw / 2, y);
-        ctx.lineTo(x + cw, y + ch / 2);
-        ctx.lineTo(x + cw / 2, y + ch);
-        ctx.lineTo(x, y + ch / 2);
-        ctx.closePath(); ctx.fill();
-      } else {
-        const bars = 2 + Math.floor(rng() * 4);
-        for (let b = 0; b < bars; b++) {
-          ctx.fillStyle = paletteCss(palette, rng());
-          ctx.fillRect(x, y + (b / bars) * ch, cw, ch / bars * 0.55);
-        }
-      }
-    }
-  }
-}
-
-function dither(ctx, opts) {
-  const { w, h, palette, density, noise } = opts;
-  const bayer = [
-    [ 0,32, 8,40, 2,34,10,42],
-    [48,16,56,24,50,18,58,26],
-    [12,44, 4,36,14,46, 6,38],
-    [60,28,52,20,62,30,54,22],
-    [ 3,35,11,43, 1,33, 9,41],
-    [51,19,59,27,49,17,57,25],
-    [15,47, 7,39,13,45, 5,37],
-    [63,31,55,23,61,29,53,21],
-  ];
-  const img = ctx.createImageData(w, h);
-  const data = img.data;
-  const pixSize = Math.max(2, Math.round((w / 500) * (1 + (100 - density) / 30)));
-  const scale = 0.003;
-  for (let y = 0; y < h; y += pixSize) {
-    for (let x = 0; x < w; x += pixSize) {
-      const n = (noise.fbm(x * scale, y * scale, 3) + 1) * 0.5;
-      const thr = bayer[((y / pixSize) | 0) % 8][((x / pixSize) | 0) % 8] / 64;
-      const t = Math.max(0, Math.min(0.999, n + (thr - 0.5) * 0.18));
-      const c = paletteRgb(palette, t);
-      const r = c[0] | 0, g = c[1] | 0, b = c[2] | 0;
-      for (let dy = 0; dy < pixSize && y + dy < h; dy++) {
-        for (let dx = 0; dx < pixSize && x + dx < w; dx++) {
-          const idx = ((y + dy) * w + (x + dx)) * 4;
-          data[idx] = r; data[idx + 1] = g; data[idx + 2] = b; data[idx + 3] = 255;
-        }
-      }
-    }
-  }
-  ctx.putImageData(img, 0, 0);
-}
-
-const ALGOS = { flow: flowField, voronoi, mandala, plasma, tiles, dither };
-
-// ---------- State ----------
-const state = {
-  style: 'flow',
-  paletteName: 'sunset',
-  density: 50,
-  aspect: '1:1',
-  seed: (Math.random() * 1e9) | 0,
-};
-
-function aspectDims(aspect, longSide) {
-  const [a, b] = aspect.split(':').map(Number);
-  if (a >= b) return { w: longSide, h: Math.round(longSide * b / a) };
-  return { w: Math.round(longSide * a / b), h: longSide };
-}
-
-function renderTo(canvas, longSide) {
-  const { w, h } = aspectDims(state.aspect, longSide);
-  canvas.width = w; canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, w, h);
-  const rng = mulberry32(state.seed);
-  const noise = new Noise(rng);
-  const palette = PALETTES[state.paletteName];
-  ALGOS[state.style](ctx, { w, h, palette, density: state.density, rng, noise });
-}
-
-function renderPreview() {
-  const c = document.getElementById('preview');
-  const wrapW = window.innerWidth - (window.innerWidth > 880 ? 380 : 32);
-  const wrapH = window.innerHeight - (window.innerWidth > 880 ? 60 : 80);
-  const longSide = Math.max(540, Math.min(1400, Math.min(wrapW, wrapH * (state.aspect === '16:9' ? 16/9 : 1.4))));
-  renderTo(c, longSide | 0);
-  document.getElementById('seed-info').textContent =
-    `seed ${state.seed} · ${state.style} · ${state.paletteName} · ${state.aspect}`;
-}
-
-function downloadHighRes() {
-  const busy = document.getElementById('busy');
-  busy.classList.add('on');
-  setTimeout(() => {
-    const c = document.createElement('canvas');
-    renderTo(c, 3840);
-    c.toBlob((blob) => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `print-${state.style}-${state.paletteName}-${state.seed}.png`;
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
-      busy.classList.remove('on');
-    }, 'image/png');
-  }, 30);
-}
-
-function saveToGallery() {
-  const c = document.createElement('canvas');
-  renderTo(c, 360);
-  const thumb = c.toDataURL('image/jpeg', 0.72);
-  const items = JSON.parse(localStorage.getItem('gallery') || '[]');
-  items.unshift({
-    style: state.style,
-    paletteName: state.paletteName,
-    density: state.density,
-    aspect: state.aspect,
-    seed: state.seed,
-    thumb,
-  });
-  if (items.length > 18) items.length = 18;
-  localStorage.setItem('gallery', JSON.stringify(items));
-  renderGallery();
-}
-
-function renderGallery() {
-  const g = document.getElementById('gallery');
-  const items = JSON.parse(localStorage.getItem('gallery') || '[]');
-  g.innerHTML = '';
-  if (!items.length) {
-    const e = document.createElement('div');
-    e.className = 'empty';
-    e.textContent = 'No saved prints yet.';
-    g.appendChild(e);
-    return;
-  }
-  items.forEach((it) => {
-    const div = document.createElement('div');
-    div.className = 'thumb';
-    div.style.backgroundImage = `url(${it.thumb})`;
-    div.title = `${it.style} · ${it.paletteName} (click to load)`;
-    div.addEventListener('click', () => {
-      state.style = it.style;
-      state.paletteName = it.paletteName;
-      state.density = it.density;
-      state.aspect = it.aspect;
-      state.seed = it.seed;
-      syncUI(); renderPreview();
-    });
-    g.appendChild(div);
-  });
-}
-
-function syncUI() {
-  document.querySelectorAll('#styles .btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.style === state.style);
-  });
-  document.querySelectorAll('#aspects .btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.aspect === state.aspect);
-  });
-  document.querySelectorAll('#palettes .swatch').forEach(s => {
-    s.classList.toggle('active', s.dataset.palette === state.paletteName);
-  });
-  document.getElementById('density').value = state.density;
-  document.getElementById('densityVal').textContent = state.density;
-}
-
-function buildPalettes() {
-  const wrap = document.getElementById('palettes');
-  Object.entries(PALETTES).forEach(([name, cols]) => {
-    const s = document.createElement('div');
-    s.className = 'swatch';
-    s.dataset.palette = name;
-    s.title = name;
-    cols.forEach((c) => {
-      const st = document.createElement('div');
-      st.className = 'stripe';
-      st.style.background = c;
-      s.appendChild(st);
-    });
-    s.addEventListener('click', () => {
-      state.paletteName = name;
-      syncUI(); renderPreview();
-    });
-    wrap.appendChild(s);
-  });
-}
-
-function init() {
-  buildPalettes();
-  syncUI();
-  document.querySelectorAll('#styles .btn').forEach(b => {
-    b.addEventListener('click', () => {
-      state.style = b.dataset.style;
-      state.seed = (Math.random() * 1e9) | 0;
-      syncUI(); renderPreview();
-    });
-  });
-  document.querySelectorAll('#aspects .btn').forEach(b => {
-    b.addEventListener('click', () => {
-      state.aspect = b.dataset.aspect;
-      syncUI(); renderPreview();
-    });
-  });
-  const dens = document.getElementById('density');
-  let densTimer;
-  dens.addEventListener('input', () => {
-    state.density = +dens.value;
-    document.getElementById('densityVal').textContent = state.density;
-    clearTimeout(densTimer);
-    densTimer = setTimeout(renderPreview, 60);
-  });
-  document.getElementById('regen').addEventListener('click', () => {
-    state.seed = (Math.random() * 1e9) | 0;
-    renderPreview();
-  });
-  document.getElementById('save').addEventListener('click', saveToGallery);
-  document.getElementById('download').addEventListener('click', downloadHighRes);
-  document.getElementById('preview').addEventListener('click', () => {
-    state.seed = (Math.random() * 1e9) | 0;
-    renderPreview();
-  });
-  let resizeTimer;
-  window.addEventListener('resize', () => {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(renderPreview, 100);
-  });
-  renderGallery();
-  renderPreview();
-}
-
-init();
-</script>
+<script src="app.js?v=29"></script>
 </body>
 </html>
