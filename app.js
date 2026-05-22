@@ -645,11 +645,14 @@ function gpsToPng(holeNum, gps) {
 
 function updateGpsStatus() {
   const el = document.getElementById('gpsStatus');
-  const btn = document.getElementById('gpsToggleBtn');
-  if (btn) btn.classList.toggle('on', gpsEnabled && gpsInRange);
+  const planner = document.getElementById('modePlannerBtn');
+  const live = document.getElementById('modeLiveBtn');
+  if (planner) planner.classList.toggle('active', !gpsEnabled);
+  if (live) live.classList.toggle('active', gpsEnabled);
+  if (live) live.classList.toggle('live', gpsEnabled);
   if (!el) return;
-  if (gpsDenied) { el.textContent = 'GPS permission denied'; return; }
-  if (!gpsEnabled) { el.textContent = 'GPS off'; return; }
+  if (!gpsEnabled) { el.textContent = 'Shot planner — tap the fairway to measure'; return; }
+  if (gpsDenied)   { el.textContent = 'GPS permission denied — enable in browser settings'; return; }
   if (!currentGps) { el.textContent = 'Acquiring GPS…'; return; }
   const acc = Math.round(currentGps.accuracy);
   if (!gpsInRange) {
@@ -659,7 +662,7 @@ function updateGpsStatus() {
   const cal = geoCal[currentHole];
   const calibrated = cal && cal.green && cal.green.lat != null;
   if (!calibrated) {
-    el.textContent = `±${acc}m · hole ${currentHole} not calibrated yet`;
+    el.textContent = `±${acc}m · hole ${currentHole} not calibrated`;
     return;
   }
   const dToGreen = Math.round(haversineMeters(currentGps, cal.green));
@@ -728,12 +731,14 @@ function _stopGpsInternal(silent) {
 }
 
 function startGps() {
-  localStorage.removeItem('gccb.gpsDisabled');
+  localStorage.setItem('gccb.mode', 'live');
   _startGpsInternal();
 }
 
 function stopGps() {
-  localStorage.setItem('gccb.gpsDisabled', '1');
+  localStorage.setItem('gccb.mode', 'planner');
+  currentGps = null;
+  gpsInRange = false;
   _stopGpsInternal();
 }
 
@@ -889,7 +894,8 @@ function useGpsForMarker(which) {
 }
 
 (function wireGeoUi() {
-  const gpsBtn = document.getElementById('gpsToggleBtn');
+  const plannerBtn = document.getElementById('modePlannerBtn');
+  const liveBtn = document.getElementById('modeLiveBtn');
   const gpsRefresh = document.getElementById('gpsRefreshBtn');
   const calBtn = document.getElementById('calibrateBtn');
   const calClose = document.getElementById('calCloseBtn');
@@ -899,7 +905,8 @@ function useGpsForMarker(which) {
   const calUseWhite = document.getElementById('calUseGpsWhite');
   const calHoleSel = document.getElementById('calHoleSelect');
 
-  if (gpsBtn) gpsBtn.addEventListener('click', toggleGps);
+  if (plannerBtn) plannerBtn.addEventListener('click', () => { if (gpsEnabled) stopGps(); });
+  if (liveBtn) liveBtn.addEventListener('click', () => { if (!gpsEnabled) startGps(); });
   if (gpsRefresh) gpsRefresh.addEventListener('click', refreshGpsOnce);
   if (calBtn) calBtn.addEventListener('click', openCalibration);
   if (calClose) calClose.addEventListener('click', closeCalibration);
@@ -922,20 +929,16 @@ function useGpsForMarker(which) {
 
 loadHole(currentHole);
 
-// Auto-start GPS on every load — the watch itself decides if the
-// dot should appear (only when within COURSE_RADIUS_M of a green).
-// If the user has explicitly turned it off, skip the auto-start.
-(function autoStartGps() {
+// Resume the last selected mode. Default is Shot planner (GPS off).
+// In Live mode the watch self-disables when out of range, matching
+// "check on load; if too far, turn it off".
+(function autoResumeMode() {
+  const mode = localStorage.getItem('gccb.mode') || 'planner';
+  if (mode !== 'live') { updateGpsStatus(); return; }
   if (!navigator.geolocation) { updateGpsStatus(); return; }
-  if (localStorage.getItem('gccb.gpsDisabled')) { gpsEnabled = false; updateGpsStatus(); return; }
-
   if (navigator.permissions && navigator.permissions.query) {
     navigator.permissions.query({ name: 'geolocation' }).then(s => {
-      if (s.state === 'denied') {
-        gpsDenied = true;
-        updateGpsStatus();
-        return;
-      }
+      if (s.state === 'denied') { gpsDenied = true; updateGpsStatus(); return; }
       _startGpsInternal();
     }).catch(() => _startGpsInternal());
   } else {

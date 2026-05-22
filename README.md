@@ -10,9 +10,13 @@ per-hole PNGs, with an OpenStreetMap-based calibration UI.
 - Point-to-point measurement mode
 - Hole selector: Front 9 / Back 9 grid, dropdown, Prev/Next buttons, swipe gestures
 - Teebox selection (WHITE / YELLOW / BLUE / RED)
-- **Live GPS dot on the hole PNG**, with continuous refresh
-  (`watchPosition` + a 5 s manual re-fix), and an auto-disable when the
-  device is more than 800 m from any calibrated green
+- **Mode toggle**: switch between **Shot planner** (no GPS, the
+  classic tap-to-measure flow) and **Live location** (GPS on). The
+  selected mode is remembered across sessions.
+- **Live GPS dot on the hole PNG** while in Live location mode, with
+  continuous refresh (`watchPosition` + a 5 s manual re-fix), and an
+  auto-disable when the device is more than 800 m from any calibrated
+  green
 - **OSM-derived calibration baked in**: all 18 holes are pre-calibrated
   from OpenStreetMap (`golf=hole` ways under the GCCB course, way
   `269050363`). Each hole's first node is the WHITE tee, last node is

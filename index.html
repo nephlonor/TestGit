@@ -393,11 +393,11 @@
     line-height: 1.5;
   }
 
-  /* GPS bar */
+  /* Mode + GPS bar */
   .gps-bar {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;
+    gap: 6px;
     margin: 0 12px 8px;
     padding: 8px 10px;
     background: var(--bg-elev);
@@ -406,12 +406,18 @@
     font-size: 13px;
     color: var(--muted);
   }
+  .gps-bar .gps-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
   .gps-bar .gps-status {
     flex: 1;
     line-height: 1.3;
     min-width: 0;
+    font-size: 12px;
   }
-  .gps-bar button {
+  .gps-bar button.aux {
     background: transparent;
     color: var(--text);
     border: 1px solid var(--line);
@@ -422,21 +428,42 @@
     cursor: pointer;
     flex-shrink: 0;
   }
-  .gps-bar button.on {
+  .mode-toggle-group {
+    display: flex;
+    width: 100%;
+    background: var(--bg-input);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .mode-toggle-group button {
+    flex: 1;
+    background: transparent;
+    color: var(--muted);
+    border: none;
+    border-radius: 6px;
+    padding: 7px 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 1.2;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mode-toggle-group button.active {
+    background: var(--accent);
+    color: var(--bg);
+  }
+  .mode-toggle-group button.active.live {
     background: #007aff;
-    border-color: #007aff;
     color: #fff;
   }
-  .gps-bar #gpsToggleBtn::before {
-    content: "●";
-    color: #6a7b94;
-    margin-right: 4px;
+  .mode-toggle-group button .sub {
+    display: block;
     font-size: 10px;
-    vertical-align: 1px;
-  }
-  .gps-bar #gpsToggleBtn.on::before {
-    color: #fff;
-    text-shadow: 0 0 4px rgba(255,255,255,0.6);
+    font-weight: 500;
+    opacity: 0.7;
+    margin-top: 1px;
   }
 
   /* Calibration modal */
@@ -608,10 +635,19 @@
 </header>
 
 <div class="gps-bar">
-  <span class="gps-status" id="gpsStatus">GPS off</span>
-  <button id="gpsRefreshBtn" type="button" title="Refresh GPS now" aria-label="Refresh GPS">↻</button>
-  <button id="gpsToggleBtn" type="button">GPS</button>
-  <button id="calibrateBtn" type="button">Map</button>
+  <div class="mode-toggle-group" role="group" aria-label="Mode">
+    <button type="button" id="modePlannerBtn" class="active" data-mode="planner">
+      Shot planner<span class="sub">no GPS</span>
+    </button>
+    <button type="button" id="modeLiveBtn" data-mode="live">
+      Live location<span class="sub">GPS on</span>
+    </button>
+  </div>
+  <div class="gps-row">
+    <span class="gps-status" id="gpsStatus">Shot planner mode</span>
+    <button class="aux" id="gpsRefreshBtn" type="button" title="Refresh GPS now" aria-label="Refresh GPS">↻</button>
+    <button class="aux" id="calibrateBtn" type="button">Map</button>
+  </div>
 </div>
 
 <div id="installPrompt" hidden>
@@ -681,7 +717,7 @@
 <div id="welcomeModal" hidden role="dialog" aria-modal="true" aria-labelledby="welcomeText">
   <div class="modal-card">
     <img src="assets/logo.png?v=29" alt="GCCB">
-    <p id="welcomeText">Tap the fairway to measure shots. The blue dot is your live GPS position; all 18 holes are pre-calibrated from OpenStreetMap. Open <b>Map</b> if you want to nudge a hole's green or white-tee pin.</p>
+    <p id="welcomeText">Switch between <b>Shot planner</b> (tap to measure) and <b>Live location</b> (your GPS as a blue dot). All 18 holes are pre-calibrated from OpenStreetMap; <b>Map</b> lets you nudge any hole's pins.</p>
     <button id="welcomeOk" type="button">Got it</button>
   </div>
 </div>
