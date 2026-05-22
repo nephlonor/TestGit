@@ -13,21 +13,30 @@ per-hole PNGs, with an OpenStreetMap-based calibration UI.
 - **Live GPS dot on the hole PNG**, with continuous refresh
   (`watchPosition` + a 5 s manual re-fix), and an auto-disable when the
   device is more than 800 m from any calibrated green
-- **OSM map calibration** (Leaflet): for each hole, drag a green pin and a
-  white-tee pin onto the real positions and save — the app derives a
-  similarity transform from those two anchor pairs (PNG ↔ GPS)
+- **OSM-derived calibration baked in**: all 18 holes are pre-calibrated
+  from OpenStreetMap (`golf=hole` ways under the GCCB course, way
+  `269050363`). Each hole's first node is the WHITE tee, last node is
+  the green centre — path lengths match the scorecard WHITE yardages
+  to within a few metres, confirming the convention.
+- **OSM map calibration UI** (Leaflet): the `Map` button opens a
+  full-screen OpenStreetMap view per hole with draggable Green and
+  White-tee pins. Saved overrides win per hole over the baked-in
+  defaults; `Clear hole` restores the OSM default.
 - Dark-blue CI background, white GCCB shield logo
 - Installable as iOS home-screen app (PWA)
 
-## Calibrating a hole
+## Adjusting a hole's calibration
+
+Defaults are seeded from OSM, so nothing has to be set up for live GPS to
+work. To override a single hole:
 
 1. Tap **Map** in the top GPS bar.
 2. Pick the hole.
-3. Drag the green pin onto the middle of the green and the white pin onto
-   the white teebox. You can also tap **Green = my GPS** / **White tee =
-   my GPS** while standing on the point.
-4. Save. The blue GPS dot will now appear in the correct spot on that
-   hole's PNG whenever you're within 800 m of any calibrated green.
+3. Drag the green pin onto the middle of the green and the white pin
+   onto the white teebox. You can also tap **Green = my GPS** / **White
+   tee = my GPS** while standing on the point.
+4. **Save** to lock that hole's override.
+5. **Clear hole** drops the override and restores the OSM default.
 
 ## Structure
 

@@ -510,12 +510,49 @@ if (notesArea) {
 // ============================================================
 
 const GEO_KEY = 'gccb.geo.v1';
+// Defaults seeded from OpenStreetMap (overpass query against
+// way=269050363 "Golf & Country Club Basel"). For each `golf=hole` way
+// the first node is the WHITE tee and the last node is the green
+// centre; path lengths match the scorecard WHITE yardages to within
+// a few metres on every hole, which confirms the convention.
+// Per-hole entries saved via the calibration UI override these.
+const DEFAULT_GEO_CAL = {
+   1: { green: {lat:47.5418887, lng:7.4843423}, white: {lat:47.5399647, lng:7.4812424} },
+   2: { green: {lat:47.5446193, lng:7.4871021}, white: {lat:47.5416536, lng:7.4831177} },
+   3: { green: {lat:47.5429880, lng:7.4860829}, white: {lat:47.5445107, lng:7.4875823} },
+   4: { green: {lat:47.5433845, lng:7.4919301}, white: {lat:47.5430442, lng:7.4868768} },
+   5: { green: {lat:47.5425517, lng:7.4869251}, white: {lat:47.5432542, lng:7.4919020} },
+   6: { green: {lat:47.5397271, lng:7.4819818}, white: {lat:47.5423543, lng:7.4874227} },
+   7: { green: {lat:47.5410182, lng:7.4800307}, white: {lat:47.5400206, lng:7.4808843} },
+   8: { green: {lat:47.5398411, lng:7.4764645}, white: {lat:47.5417650, lng:7.4799822} },
+   9: { green: {lat:47.5390734, lng:7.4794042}, white: {lat:47.5396401, lng:7.4753755} },
+  10: { green: {lat:47.5377875, lng:7.4745928}, white: {lat:47.5390412, lng:7.4804233} },
+  11: { green: {lat:47.5396112, lng:7.4748310}, white: {lat:47.5379634, lng:7.4741471} },
+  12: { green: {lat:47.5401761, lng:7.4712932}, white: {lat:47.5398004, lng:7.4758020} },
+  13: { green: {lat:47.5372970, lng:7.4688792}, white: {lat:47.5402666, lng:7.4709472} },
+  14: { green: {lat:47.5388217, lng:7.4643919}, white: {lat:47.5372309, lng:7.4685252} },
+  15: { green: {lat:47.5363337, lng:7.4656981}, white: {lat:47.5387402, lng:7.4638286} },
+  16: { green: {lat:47.5356456, lng:7.4681121}, white: {lat:47.5359896, lng:7.4657840} },
+  17: { green: {lat:47.5366741, lng:7.4740291}, white: {lat:47.5361707, lng:7.4688041} },
+  18: { green: {lat:47.5389484, lng:7.4809357}, white: {lat:47.5370037, lng:7.4743482} },
+};
+// User overrides live in localStorage; geoCal is the merged view
+// (overrides on top of OSM defaults) used at runtime.
+let savedGeoCal = {};
+try { savedGeoCal = JSON.parse(localStorage.getItem(GEO_KEY)) || {}; } catch {}
 let geoCal = {};
-try { geoCal = JSON.parse(localStorage.getItem(GEO_KEY)) || {}; } catch {}
+function rebuildGeoCal() {
+  geoCal = {};
+  for (let i = 1; i <= 18; i++) {
+    if (savedGeoCal[i]) geoCal[i] = savedGeoCal[i];
+    else if (DEFAULT_GEO_CAL[i]) geoCal[i] = DEFAULT_GEO_CAL[i];
+  }
+}
+rebuildGeoCal();
 
 // Approximate centre of Golf & Country Club Basel (Hagenthal-le-Bas).
 // Only used as a fallback when no hole is calibrated yet.
-const COURSE_CENTER_FALLBACK = { lat: 47.5167, lng: 7.5050 };
+const COURSE_CENTER_FALLBACK = { lat: 47.5402, lng: 7.4779 };
 // Disable live-position display beyond this distance from any
 // calibrated green (or, if none calibrated, the fallback centre).
 const COURSE_RADIUS_M = 800;
@@ -809,11 +846,12 @@ function saveCurrentCalibration() {
   const n = parseInt(document.getElementById('calHoleSelect').value);
   const g = calGreenMarker.getLatLng();
   const w = calWhiteMarker.getLatLng();
-  geoCal[n] = {
+  savedGeoCal[n] = {
     green: { lat: g.lat, lng: g.lng },
     white: { lat: w.lat, lng: w.lng },
   };
-  localStorage.setItem(GEO_KEY, JSON.stringify(geoCal));
+  localStorage.setItem(GEO_KEY, JSON.stringify(savedGeoCal));
+  rebuildGeoCal();
   if (currentGps) gpsInRange = isGpsInRange(currentGps);
   updateGpsStatus();
   redraw();
@@ -827,9 +865,11 @@ function saveCurrentCalibration() {
 }
 
 function clearCurrentCalibration() {
+  // Drop the user override; the OSM default for this hole takes over.
   const n = parseInt(document.getElementById('calHoleSelect').value);
-  delete geoCal[n];
-  localStorage.setItem(GEO_KEY, JSON.stringify(geoCal));
+  delete savedGeoCal[n];
+  localStorage.setItem(GEO_KEY, JSON.stringify(savedGeoCal));
+  rebuildGeoCal();
   if (currentGps) gpsInRange = isGpsInRange(currentGps);
   updateGpsStatus();
   loadHoleCalibrationIntoMap(n);
