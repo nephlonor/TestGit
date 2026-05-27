@@ -201,7 +201,7 @@ function loadHole(n) {
   bgImage = new Image();
   bgImage.onload = () => { bgLoaded = true; redraw(); };
   bgImage.onerror = () => { bgLoaded = false; redraw(); };
-  bgImage.src = `holes/loch${n}.png?v=31`;
+  bgImage.src = `holes/loch${n}.png?v=32`;
   updateHoleInfo();
   updateHoleVideo();
   // The blue-dot-in-frame check is hole-specific, so re-derive on
@@ -677,6 +677,10 @@ function updateGpsStatus() {
   if (live) live.classList.toggle('live', gpsEnabled);
   if (!el) return;
   if (gpsDenied)   { el.textContent = 'GPS permission denied — enable in browser settings'; return; }
+  if (plannerOverride) {
+    el.textContent = 'Shot planner (manual) — tap Live to resume auto';
+    return;
+  }
   if (!gpsAcquiring && !currentGps) { el.textContent = 'Shot planner — tap the fairway to measure'; return; }
   if (!currentGps) { el.textContent = 'Acquiring GPS…'; return; }
   const acc = Math.round(currentGps.accuracy);
@@ -707,13 +711,28 @@ function gpsDotInFrameForCurrent() {
   return pos.x >= 0 && pos.x <= COORD_W && pos.y >= 0 && pos.y <= COORD_H;
 }
 
-// Re-derives gpsEnabled (Live vs Shot planner) from the in-frame check.
+// Manual override: when true, the user has chosen to stay in Shot
+// planner regardless of where the GPS dot would be. Cleared by
+// tapping the Live location button.
+let plannerOverride = localStorage.getItem('gccb.plannerOverride') === '1';
+
+// Re-derives gpsEnabled (Live vs Shot planner) from the in-frame check,
+// unless the user has manually locked to Shot planner.
 // Returns true if the state actually changed.
 function autoUpdateMode() {
-  const next = gpsDotInFrameForCurrent();
+  const next = plannerOverride ? false : gpsDotInFrameForCurrent();
   if (next === gpsEnabled) return false;
   gpsEnabled = next;
   return true;
+}
+
+function setPlannerOverride(on) {
+  plannerOverride = !!on;
+  if (plannerOverride) localStorage.setItem('gccb.plannerOverride', '1');
+  else localStorage.removeItem('gccb.plannerOverride');
+  autoUpdateMode();
+  updateGpsStatus();
+  redraw();
 }
 
 let gpsAcquiring = false;
@@ -939,11 +958,11 @@ function useGpsForMarker(which) {
   const calUseWhite = document.getElementById('calUseGpsWhite');
   const calHoleSel = document.getElementById('calHoleSelect');
 
-  // The Shot planner / Live location buttons are auto-driven by the
-  // in-frame check; tapping them is a no-op. Showing them disabled
-  // makes that clear without losing the visual mode indicator.
-  if (plannerBtn) plannerBtn.disabled = true;
-  if (liveBtn) liveBtn.disabled = true;
+  // Mode is auto-driven by the in-frame check, but tapping Shot
+  // planner always forces a manual override; Live location clears
+  // the override so auto switching resumes.
+  if (plannerBtn) plannerBtn.addEventListener('click', () => setPlannerOverride(true));
+  if (liveBtn) liveBtn.addEventListener('click', () => setPlannerOverride(false));
   if (gpsRefresh) gpsRefresh.addEventListener('click', refreshGpsOnce);
   if (calBtn) calBtn.addEventListener('click', openCalibration);
   if (calClose) calClose.addEventListener('click', closeCalibration);
