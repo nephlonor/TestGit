@@ -201,7 +201,7 @@ function loadHole(n) {
   bgImage = new Image();
   bgImage.onload = () => { bgLoaded = true; redraw(); };
   bgImage.onerror = () => { bgLoaded = false; redraw(); };
-  bgImage.src = `holes/loch${n}.png?v=29`;
+  bgImage.src = `holes/loch${n}.png?v=30`;
   updateHoleInfo();
   updateHoleVideo();
   updateGpsStatus();
@@ -292,13 +292,17 @@ function updateDisplay() {
   const ballColor = TEE_COLORS[teeboxSelect.value] || '#ffd54a';
 
   if (!measurementModeSwitch.checked) {
-    if (!lastClick) return;
+    // In Live mode the ball follows the live GPS dot whenever it's
+    // visible (in range + hole calibrated). Saved tap is preserved
+    // for when the user switches back to Shot planner.
+    const ball = liveBallPos() || lastClick;
+    if (!ball) return;
     const tee = hole.tees[teeboxSelect.value];
-    drawLine(tee, lastClick, 'rgba(0,0,0,0.85)', 2.5);
-    drawLine(hole.green, lastClick, 'rgba(0,0,0,0.85)', 2.5);
-    drawPoint(lastClick, ballColor, 9);
-    drawLabel(`${Math.round(getLength(hole.green, lastClick))}m`, lastClick.x + 12, lastClick.y);
-    drawLabel(`${Math.round(getLength(tee, lastClick))}m`,        lastClick.x + 12, lastClick.y + 16);
+    drawLine(tee, ball, 'rgba(0,0,0,0.85)', 2.5);
+    drawLine(hole.green, ball, 'rgba(0,0,0,0.85)', 2.5);
+    drawPoint(ball, ballColor, 9);
+    drawLabel(`${Math.round(getLength(hole.green, ball))}m`, ball.x + 12, ball.y);
+    drawLabel(`${Math.round(getLength(tee, ball))}m`,        ball.x + 12, ball.y + 16);
   } else {
     if (firstPoint) drawPoint(firstPoint, ballColor, 9);
     if (lastClick) drawPoint(lastClick, ballColor, 9);
@@ -307,6 +311,16 @@ function updateDisplay() {
       drawLabel(`${Math.round(getLength(firstPoint, lastClick))}m`, lastClick.x + 12, lastClick.y + 10);
     }
   }
+}
+
+// In Live mode (normal measurement only), the ball marker follows the
+// live GPS fix. Returns null in Shot planner mode, in p2p, or when
+// the blue dot isn't currently being drawn (no fix, out of range, or
+// hole not calibrated).
+function liveBallPos() {
+  if (!gpsEnabled || measurementModeSwitch.checked) return null;
+  if (!currentGps || !gpsInRange) return null;
+  return gpsToPng(currentHole, currentGps);
 }
 
 function drawGpsMarker() {
@@ -354,17 +368,21 @@ const HIT_RADIUS = 16;
 
 function hitTest(p) {
   // Returns the *user-placed* dot under the pointer, or null.
-  // Tees and the green are intentionally not draggable.
+  // Tees and the green are intentionally not draggable. In Live mode +
+  // normal measurement the ball is GPS-driven, so it's not draggable
+  // either.
   if (measurementModeSwitch.checked) {
     if (lastClick  && getDistance(lastClick,  p) <= HIT_RADIUS) return 'last';
     if (firstPoint && getDistance(firstPoint, p) <= HIT_RADIUS) return 'first';
-  } else {
+  } else if (!gpsEnabled) {
     if (lastClick  && getDistance(lastClick,  p) <= HIT_RADIUS) return 'last';
   }
   return null;
 }
 
 function placeTap(p) {
+  // Live mode + normal: GPS owns the ball, ignore taps.
+  if (gpsEnabled && !measurementModeSwitch.checked) return;
   if (measurementModeSwitch.checked) {
     if (!firstPoint) {
       // 1st tap: drop first point on its own.
