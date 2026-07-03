@@ -1,70 +1,48 @@
-# GCCB Shot Tracker (Test)
+# Pump! — Dock Start Foiling
 
-Test fork of the GCCB Shot Tracker that adds **live GPS positioning** on the
-per-hole PNGs, with an OpenStreetMap-based calibration UI.
+A phone game about **pump foiling**, played with your phone's real motion
+sensors. Top-down view: a foil board, water, and a dock.
 
-## Features
+## How to play
 
-- Interactive hole map for all 18 holes
-- Tap to mark a shot — shows distance to green and distance from tee
-- Point-to-point measurement mode
-- Hole selector: Front 9 / Back 9 grid, dropdown, Prev/Next buttons, swipe gestures
-- Teebox selection (WHITE / YELLOW / BLUE / RED)
-- **Mode toggle**: switch between **Shot planner** (no GPS, the
-  classic tap-to-measure flow) and **Live location** (GPS on). The
-  selected mode is remembered across sessions.
-- **Live GPS dot on the hole PNG** while in Live location mode, with
-  continuous refresh (`watchPosition` + a 5 s manual re-fix), and an
-  auto-disable when the device is more than 800 m from any calibrated
-  green
-- **OSM-derived calibration baked in**: all 18 holes are pre-calibrated
-  from OpenStreetMap (`golf=hole` ways under the GCCB course, way
-  `269050363`). Each hole's first node is the WHITE tee, last node is
-  the green centre — path lengths match the scorecard WHITE yardages
-  to within a few metres, confirming the convention.
-- **OSM map calibration UI** (Leaflet): the `Map` button opens a
-  full-screen OpenStreetMap view per hole with draggable Green and
-  White-tee pins. Saved overrides win per hole over the baked-in
-  defaults; `Clear hole` restores the OSM default.
-- Dark-blue CI background, white GCCB shield logo
-- Installable as iOS home-screen app (PWA)
+1. **Dock start** — put two fingers on the board and shove it forward along
+   the dock. Keep pushing until you hit takeoff speed.
+2. **Ride the foil** — tilt the phone like it's the board:
+   - **Nose down** (tilt the top of the phone away/down): you accelerate,
+     but the board drops toward the water — the ripples grow as you get low.
+   - **Nose up** (tilt toward you): you climb away from the water, but bleed
+     speed to induced drag.
+3. **Pump** — physically push the whole phone downward during the
+   **nose-down** stroke. The accelerometer picks up the spike and converts
+   it into speed. That's the pump: down-and-forward, then rise, repeat.
+4. Find the rhythm. A perfect cycle of nose-down / pump / nose-up holds an
+   equilibrium of height and speed — and the clock keeps running.
 
-## Adjusting a hole's calibration
+## Ways to splash
 
-Defaults are seeded from OSM, so nothing has to be set up for live GPS to
-work. To override a single hole:
+- **Touchdown** — ride height reaches the water.
+- **Breach** — climb too high, the foil leaves the water and loses all lift.
+- **Stall (nose high)** — hold the nose up too long and the foil lets go.
+- **Stall (bad pump)** — push down on the phone while the nose is still up.
+- **Too slow** — below flying speed the foil can't carry you; you sink.
 
-1. Tap **Map** in the top GPS bar.
-2. Pick the hole.
-3. Drag the green pin onto the middle of the green and the white pin
-   onto the white teebox. You can also tap **Green = my GPS** / **White
-   tee = my GPS** while standing on the point.
-4. **Save** to lock that hole's override.
-5. **Clear hole** drops the override and restores the OSM default.
+Score = time on foil. Your best ride is saved on the device.
 
-## Structure
+## Running it
 
-```
-index.html              Main page
-app.js                  Hole data + interaction logic
-manifest.webmanifest    PWA manifest
-assets/logo-white.png   GCCB shield (white)
-icons/                  App icons (Apple touch icon, PWA icons, favicon)
-holes/loch1.png..loch18.png   Per-hole background maps (placeholders)
-```
+It's a static web app — no build step.
 
-## Replacing placeholder hole maps
+- **On your phone**: open the GitHub Pages URL for this repo (deployed
+  automatically from `main`). Add to home screen for fullscreen play.
+  Motion/tilt sensor access requires **HTTPS** and, on iOS, a permission
+  prompt (triggered by the RIDE button).
+- **Locally**: `python3 -m http.server` and open `http://localhost:8000`.
+- **On a computer** (no sensors): ↑/↓ arrows tilt the nose, Space pumps,
+  click-drag upward does the dock push.
 
-The `holes/loch{N}.png` files are 210×700 placeholders. Replace each one
-with the corresponding real hole map (same filename, same dimensions or
-they'll be stretched to that aspect ratio).
+## Files
 
-## Running
-
-It's a static site — open `index.html` in a browser or serve the folder:
-
-```
-python3 -m http.server 8000
-```
-
-On iOS Safari, use *Share → Add to Home Screen* to install as an app.
+- `index.html` — page shell, menu and game-over overlays
+- `game.js` — everything: sensors, physics, rendering, audio
+- `manifest.webmanifest`, `icons/` — PWA install metadata
+- `.github/workflows/pages.yml` — GitHub Pages deploy on push to `main`

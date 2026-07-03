@@ -1,747 +1,160 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#0A2540">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Pump! — Dock Start Foiling</title>
+<meta name="description" content="A tilt-and-pump foiling game. Dock start with two fingers, then pump the phone to stay on foil.">
+<meta name="theme-color" content="#04223f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="GCCB">
-<link rel="manifest" href="manifest.webmanifest?v=32">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=32">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=32">
-<title>GCCB Shot Tracker</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-      crossorigin=""/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-        crossorigin="" defer></script>
 <style>
   :root {
-    --bg: #0A2540;
-    --bg-elev: #0e2c4d;
-    --bg-input: #0e2c4d;
-    --line: #1e406b;
-    --text: #ffffff;
-    --muted: #a8b6cc;
-    --accent: #B3A16E;
+    --deep: #04223f;
+    --mid: #0a4a7a;
+    --foam: #eaf6ff;
+    --accent: #40c8ff;
+    --danger: #ff5a6e;
   }
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
-    margin: 0;
-    padding: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  }
-  body {
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-    min-height: 100vh;
-  }
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    padding: 10px 12px 6px;
-  }
-  header img { height: 64px; width: auto; display: block; }
-
-  /* Install / Add-to-Home-Screen prompt */
-  #installPrompt {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    margin: 0 12px 8px;
-    padding: 8px 12px;
-    background: var(--bg-elev);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    font-size: 13px;
-    color: var(--muted);
-  }
-  #installPrompt[hidden] { display: none; }
-  #installPrompt .msg { flex: 1; line-height: 1.35; }
-  #installPrompt .msg b { color: var(--text); font-weight: 700; }
-  #installPrompt #installBtn {
-    background: var(--accent);
-    color: var(--bg);
-    border: none;
-    border-radius: 8px;
-    padding: 6px 12px;
-    font-size: 13px;
-    font-weight: 700;
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-  #installPrompt #installDismiss {
-    background: transparent;
-    color: var(--muted);
-    border: none;
-    font-size: 20px;
-    line-height: 1;
-    padding: 0 4px;
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-  header h1 {
-    font-size: 16px;
-    font-weight: 600;
-    margin: 0;
-    letter-spacing: 0.5px;
-  }
-  .hole-nav {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 4px;
-  }
-  .hole-nav-btn {
-    background: none;
-    border: none;
-    color: var(--text);
-    font-size: 28px;
-    line-height: 1;
-    font-weight: 700;
-    padding: 0 6px;
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-  .hole-nav-btn:disabled { opacity: 0.3; }
-  .hole-select-wrap {
-    flex: 1;
-    position: relative;
-  }
-  select#holeSelect {
-    width: 100%;
-    background: transparent;
-    color: var(--text);
-    border: none;
-    padding: 0 14px 0 0;
-    font-size: 22px;
-    font-weight: 700;
-    appearance: none;
-    -webkit-appearance: none;
-    text-align: center;
-    text-align-last: center;
-    line-height: 1;
-  }
-  .hole-select-wrap::after {
-    content: "▾";
-    position: absolute;
-    right: 0; top: 50%;
-    transform: translateY(-50%);
-    pointer-events: none;
-    color: var(--muted);
-    font-size: 12px;
-  }
-  .nine-tabs {
-    display: flex;
-    gap: 6px;
-    padding: 0 12px 8px;
-  }
-  .nine-tabs button {
-    flex: 1;
-    background: var(--bg-input);
-    color: var(--muted);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 8px;
-    font-size: 13px;
-    font-weight: 600;
-  }
-  .nine-tabs button.active {
-    background: var(--accent);
-    color: var(--bg);
-    border-color: var(--accent);
-  }
-  .hole-grid {
-    display: grid;
-    grid-template-columns: repeat(9, 1fr);
-    gap: 6px;
-    padding: 0 12px 10px;
-    justify-items: center;
-  }
-  .hole-grid button {
-    background: var(--bg-input);
-    color: var(--text);
-    border: 1px solid var(--line);
-    border-radius: 50%;
-    aspect-ratio: 1 / 1;
-    width: 100%;
-    max-width: 36px;
-    padding: 0;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .hole-grid button.active {
-    background: var(--accent);
-    color: var(--bg);
-    border-color: var(--accent);
-  }
-  .info-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 8px 12px;
-    background: var(--bg-elev);
-    border-top: 1px solid var(--line);
-    border-bottom: 1px solid var(--line);
-    flex-wrap: wrap;
-  }
-  .info-row label {
-    font-size: 13px;
-    color: var(--muted);
-    margin-right: 6px;
-  }
-  .info-row select {
-    background: var(--bg-input);
-    color: var(--text);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 6px 10px;
-    font-size: 14px;
-    font-weight: 600;
-  }
-  .info-row option[value="RED"] { color: #ff5252; }
-  .info-row option[value="BLUE"] { color: #87CEFA; }
-  .info-row option[value="YELLOW"] { color: gold; }
-  .info-row option[value="WHITE"] { color: #fff; }
-  #teeboxSelect option[value="RED"] { color: #ff5252; }
-  #teeboxSelect option[value="BLUE"] { color: #87CEFA; }
-  #teeboxSelect option[value="YELLOW"] { color: gold; }
-  #teeboxSelect option[value="WHITE"] { color: #fff; }
-  .mode-toggle {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    color: var(--muted);
-  }
-  .switch {
-    position: relative;
-    display: inline-block;
-    width: 46px;
-    height: 26px;
-  }
-  .switch input { opacity: 0; width: 0; height: 0; }
-  .slider {
-    position: absolute; inset: 0;
-    background: #4a6789;
-    border-radius: 26px;
-    transition: 0.2s;
-    cursor: pointer;
-  }
-  .slider:before {
-    content: "";
-    position: absolute;
-    left: 3px; bottom: 3px;
-    width: 20px; height: 20px;
-    background: #fff;
-    border-radius: 50%;
-    transition: 0.2s;
-  }
-  input:checked + .slider { background: var(--accent); }
-  input:checked + .slider:before { transform: translateX(20px); }
-  .clear-btn {
-    background: transparent;
-    color: var(--muted);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 6px 10px;
-    font-size: 13px;
-  }
-  .canvas-wrap {
-    display: flex;
-    align-items: stretch;
-    justify-content: center;
-    gap: 14px;
-    padding: 12px;
-  }
-  #canvas {
-    background: #fff;
-    border: 1px solid var(--line);
-    border-radius: 4px;
-    width: min(calc((100vw - 24px) / 2), 180px);
-    height: auto;
-    aspect-ratio: 210 / 700;
-    display: block;
-    flex-shrink: 0;
-    /* single-finger gestures handled in JS (drag); two-finger pinch
-       still drives page zoom */
-    touch-action: pinch-zoom;
-  }
-  .hole-info {
-    flex: 1;
-    max-width: 180px;
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-    padding-top: 4px;
-  }
-  .hole-info .row {
-    display: flex;
-    flex-direction: row;
-    align-items: baseline;
-    gap: 10px;
-  }
-  .hole-info .lbl {
-    color: var(--muted);
-    font-size: 14px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    font-weight: 600;
-  }
-  .hole-info .val {
-    color: var(--text);
-    font-size: 30px;
-    font-weight: 700;
-    line-height: 1;
-  }
-  .hole-info .val .sub {
-    color: var(--muted);
-    font-size: 12px;
-    font-weight: 500;
-    margin-left: 4px;
-    white-space: nowrap;
-  }
-  .hole-video {
-    padding: 0 12px 12px;
-  }
-  .hole-video .embed {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 16 / 9;
-    background: #000;
-    border-radius: 10px;
+    height: 100%;
     overflow: hidden;
-    border: 1px solid var(--line);
+    background: var(--deep);
+    color: var(--foam);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: none;
+    overscroll-behavior: none;
   }
-  .hole-video iframe {
-    position: absolute;
+  #game {
+    position: fixed;
     inset: 0;
     width: 100%;
     height: 100%;
-    border: 0;
-  }
-  .page-footer {
-    text-align: center;
-    color: var(--muted);
-    font-size: 11px;
-    line-height: 1.6;
-    padding: 8px 12px 20px;
-  }
-  .page-footer img {
-    height: 56px;
-    width: auto;
     display: block;
-    margin: 0 auto 12px;
   }
-  .hole-info .row.inline {
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-  .hole-info select {
-    background: transparent;
-    color: var(--text);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 4px 8px;
-    font-size: 14px;
-    font-weight: 600;
-    appearance: none;
-    -webkit-appearance: none;
-  }
-  .hole-info .notes {
-    flex: 1;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 4px;
-    min-height: 0;
-  }
-  .hole-info textarea {
-    background: transparent;
-    color: var(--text);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 6px 8px;
-    font-size: 14px;
-    font-family: inherit;
-    line-height: 1.35;
-    width: 100%;
-    flex: 1;
-    min-height: 64px;
-    resize: none;
-    outline: none;
-  }
-  .hole-info textarea:focus { border-color: var(--accent); }
-  .hole-info textarea::placeholder { color: var(--muted); opacity: 0.6; }
-  footer {
-    text-align: center;
-    color: var(--muted);
-    font-size: 11px;
-    padding: 6px 12px 16px;
-    line-height: 1.5;
-  }
-
-  /* Mode + GPS bar */
-  .gps-bar {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin: 0 12px 8px;
-    padding: 8px 10px;
-    background: var(--bg-elev);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    font-size: 13px;
-    color: var(--muted);
-  }
-  .gps-bar .gps-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .gps-bar .gps-status {
-    flex: 1;
-    line-height: 1.3;
-    min-width: 0;
-    font-size: 12px;
-  }
-  .gps-bar button.aux {
-    background: transparent;
-    color: var(--text);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 6px 10px;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-  .mode-toggle-group {
-    display: flex;
-    width: 100%;
-    background: var(--bg-input);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 2px;
-    gap: 2px;
-  }
-  .mode-toggle-group button {
-    flex: 1;
-    background: transparent;
-    color: var(--muted);
-    border: none;
-    border-radius: 6px;
-    padding: 7px 8px;
-    font-size: 13px;
-    font-weight: 600;
-    line-height: 1.2;
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .mode-toggle-group button.active {
-    background: var(--accent);
-    color: var(--bg);
-  }
-  .mode-toggle-group button.active.live {
-    background: #007aff;
-    color: #fff;
-  }
-  .mode-toggle-group button .sub {
-    display: block;
-    font-size: 10px;
-    font-weight: 500;
-    opacity: 0.7;
-    margin-top: 1px;
-  }
-
-  /* Calibration modal */
-  #calModal {
-    position: fixed;
-    inset: 0;
-    background: rgba(10, 37, 64, 0.92);
-    z-index: 1100;
-    display: flex;
-    flex-direction: column;
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-  }
-  #calModal[hidden] { display: none; }
-  #calModal .cal-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--line);
-  }
-  #calModal h2 {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--text);
-    flex: 1;
-  }
-  #calModal .cal-header select {
-    background: var(--bg-input);
-    color: var(--text);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 6px 10px;
-    font-size: 14px;
-    font-weight: 600;
-  }
-  #calModal button.icon {
-    background: transparent;
-    border: 1px solid var(--line);
-    color: var(--text);
-    border-radius: 8px;
-    padding: 6px 10px;
-    font-size: 14px;
-    cursor: pointer;
-  }
-  #calModal .cal-body {
-    flex: 1;
-    position: relative;
-    min-height: 200px;
-  }
-  #calMap {
-    position: absolute;
-    inset: 0;
-  }
-  #calModal .cal-help {
-    padding: 8px 12px;
-    background: var(--bg-elev);
-    border-bottom: 1px solid var(--line);
-    color: var(--muted);
-    font-size: 12px;
-    line-height: 1.4;
-  }
-  #calModal .cal-help b { color: var(--text); }
-  #calModal .cal-footer {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 10px 12px;
-    border-top: 1px solid var(--line);
-    background: var(--bg-elev);
-  }
-  #calModal .cal-footer button {
-    flex: 1 1 auto;
-    background: var(--bg-input);
-    color: var(--text);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 10px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    min-width: 120px;
-  }
-  #calModal .cal-footer button.primary {
-    background: var(--accent);
-    color: var(--bg);
-    border-color: var(--accent);
-  }
-  #calModal .cal-footer button.danger {
-    color: #ff6b6b;
-  }
-  .cal-pin {
-    pointer-events: auto;
-  }
-  .cal-pin-dot {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    border: 2px solid #000;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.5);
-  }
-  .cal-pin-label {
-    position: absolute;
-    top: 22px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(0,0,0,0.78);
-    color: #fff;
-    font-size: 11px;
-    font-weight: 600;
-    padding: 1px 6px;
-    border-radius: 4px;
-    white-space: nowrap;
-    pointer-events: none;
-  }
-
-  /* First-visit welcome modal */
-  #welcomeModal {
+  .overlay {
     position: fixed;
     inset: 0;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: rgba(10, 37, 64, 0.78);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-    z-index: 1000;
-    padding: 20px;
-  }
-  #welcomeModal[hidden] { display: none; }
-  #welcomeModal .modal-card {
-    background: var(--bg-elev);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    padding: 22px 20px 18px;
-    max-width: 340px;
-    width: 100%;
     text-align: center;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    padding: 24px calc(20px + env(safe-area-inset-left)) calc(24px + env(safe-area-inset-bottom));
+    background: rgba(2, 16, 32, 0.82);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 10;
+    transition: opacity 0.25s ease;
   }
-  #welcomeModal img {
-    height: 48px;
-    width: auto;
-    margin-bottom: 12px;
+  .overlay.hidden { opacity: 0; pointer-events: none; }
+  h1 {
+    font-size: clamp(2.4rem, 12vw, 4rem);
+    letter-spacing: 0.04em;
+    font-style: italic;
+    background: linear-gradient(180deg, #fff, var(--accent));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
   }
-  #welcomeModal p {
-    color: var(--text);
-    font-size: 15px;
-    line-height: 1.4;
-    margin: 0 0 18px;
+  .sub { opacity: 0.85; margin: 6px 0 22px; font-size: 1rem; }
+  .howto {
+    text-align: left;
+    max-width: 340px;
+    margin: 0 auto 26px;
+    font-size: 0.92rem;
+    line-height: 1.45;
+    opacity: 0.92;
   }
-  #welcomeModal button {
-    background: var(--accent);
-    color: var(--bg);
-    border: none;
-    border-radius: 10px;
-    padding: 12px 22px;
-    font-size: 15px;
+  .howto li { margin: 8px 0 8px 4px; list-style: none; }
+  .howto b { color: var(--accent); }
+  .btn {
+    font: inherit;
+    font-size: 1.15rem;
     font-weight: 700;
+    letter-spacing: 0.06em;
+    color: #032034;
+    background: linear-gradient(180deg, #8fe0ff, var(--accent));
+    border: none;
+    border-radius: 999px;
+    padding: 16px 46px;
     cursor: pointer;
-    min-width: 120px;
+    box-shadow: 0 6px 24px rgba(64, 200, 255, 0.35);
+  }
+  .btn:active { transform: scale(0.97); }
+  .note { margin-top: 14px; font-size: 0.78rem; opacity: 0.55; max-width: 300px; }
+  #overResult {
+    font-size: clamp(1.5rem, 7vw, 2.2rem);
+    font-weight: 800;
+    margin-bottom: 4px;
+  }
+  #overReason { opacity: 0.85; margin-bottom: 18px; max-width: 320px; }
+  .scores {
+    display: flex;
+    gap: 28px;
+    margin-bottom: 26px;
+  }
+  .scores div { text-align: center; }
+  .scores .val { font-size: 1.7rem; font-weight: 800; color: var(--accent); }
+  .scores .lbl { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; opacity: 0.6; }
+  #newBest {
+    color: #ffd76a;
+    font-weight: 700;
+    margin-bottom: 14px;
+    display: none;
+  }
+  #rotateHint { display: none; }
+  @media (orientation: landscape) and (max-height: 500px) {
+    #rotateHint {
+      display: flex;
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      background: var(--deep);
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+    }
   }
 </style>
 </head>
 <body>
+<canvas id="game"></canvas>
 
-<header>
-  <img src="assets/logo.png?v=32" alt="GCCB">
-</header>
-
-<div class="gps-bar">
-  <div class="mode-toggle-group" role="group" aria-label="Mode">
-    <button type="button" id="modePlannerBtn" class="active" data-mode="planner">
-      Shot planner<span class="sub">no GPS</span>
-    </button>
-    <button type="button" id="modeLiveBtn" data-mode="live">
-      Live location<span class="sub">GPS on</span>
-    </button>
-  </div>
-  <div class="gps-row">
-    <span class="gps-status" id="gpsStatus">Shot planner mode</span>
-    <button class="aux" id="gpsRefreshBtn" type="button" title="Refresh GPS now" aria-label="Refresh GPS">↻</button>
-    <button class="aux" id="calibrateBtn" type="button">Map</button>
-  </div>
+<div id="menu" class="overlay">
+  <h1>PUMP!</h1>
+  <div class="sub">dock-start foiling</div>
+  <ul class="howto">
+    <li>🖐 <b>Two fingers on the board</b>, shove it forward along the dock — keep pushing to reach takeoff speed.</li>
+    <li>📱 Once on foil, <b>tilt the phone</b>: nose <b>down</b> = faster but closer to the water, nose <b>up</b> = climb but bleed speed.</li>
+    <li>💥 <b>Pump</b> — push the whole phone down — on the <b>nose-down</b> stroke to add energy.</li>
+    <li>⚠️ Touch the water, breach the foil, stall the nose, or pump while the nose is up… <b>splash</b>.</li>
+  </ul>
+  <button id="startBtn" class="btn">RIDE</button>
+  <div class="note">Uses your phone's motion &amp; tilt sensors — you'll be asked for permission. On a computer: ↑/↓ to tilt, Space to pump, drag to dock-start.</div>
 </div>
 
-<div id="installPrompt" hidden>
-  <span class="msg" id="installMsg"></span>
-  <button id="installBtn" type="button" hidden>Install</button>
-  <button id="installDismiss" type="button" aria-label="Dismiss">×</button>
-</div>
-
-<div class="nine-tabs" id="nineTabs">
-  <button data-nine="front" class="active">Front 9 (1–9)</button>
-  <button data-nine="back">Back 9 (10–18)</button>
-</div>
-
-<div class="hole-grid" id="holeGrid"></div>
-
-<div class="canvas-wrap">
-  <canvas id="canvas" width="840" height="2800"></canvas>
-  <aside class="hole-info" id="holeInfo">
-    <div class="hole-nav">
-      <button class="hole-nav-btn" id="prevBtn" aria-label="Previous hole">‹</button>
-      <div class="hole-select-wrap">
-        <select id="holeSelect"></select>
-      </div>
-      <button class="hole-nav-btn" id="nextBtn" aria-label="Next hole">›</button>
-    </div>
-    <div class="row"><span class="lbl">Par</span><span class="val" id="parVal">—</span></div>
-    <div class="row"><span class="lbl">Meters</span><span class="val" id="distVal">—</span></div>
-    <div class="row"><span class="lbl">HCP</span><span class="val" id="hcpVal">—</span></div>
-    <div class="row inline">
-      <span class="lbl">Point-to-point</span>
-      <label class="switch">
-        <input type="checkbox" id="measurementMode">
-        <span class="slider round"></span>
-      </label>
-    </div>
-    <div class="row inline">
-      <label class="lbl" for="teeboxSelect">Teebox</label>
-      <select id="teeboxSelect">
-        <option value="RED">53 (RED)</option>
-        <option value="BLUE">55 (BLUE)</option>
-        <option value="YELLOW">59 (YELLOW)</option>
-        <option value="WHITE" selected>62 (WHITE)</option>
-      </select>
-    </div>
-    <div class="row notes">
-      <label class="lbl" for="notesArea">Notes</label>
-      <textarea id="notesArea" rows="4"></textarea>
-    </div>
-  </aside>
-</div>
-
-<div class="hole-video">
-  <div class="embed">
-    <iframe id="holeVideo" src="" title="Hole video"
-            allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+<div id="gameover" class="overlay hidden">
+  <div id="overResult">SPLASH!</div>
+  <div id="overReason"></div>
+  <div id="newBest">★ New best ride! ★</div>
+  <div class="scores">
+    <div><div class="val" id="scoreTime">0.0s</div><div class="lbl">on foil</div></div>
+    <div><div class="val" id="scoreDist">0m</div><div class="lbl">distance</div></div>
+    <div><div class="val" id="scoreBest">0.0s</div><div class="lbl">best</div></div>
   </div>
+  <button id="againBtn" class="btn">AGAIN</button>
 </div>
 
-<div class="page-footer">
-  <img src="assets/logo.png?v=32" alt="GCCB">
-  © Golf &amp; Country Club Basel<br>
-  by Florian Bertram<br>
-  2026
-</div>
+<div id="rotateHint">↺ &nbsp;Rotate your phone to portrait</div>
 
-<div id="welcomeModal" hidden role="dialog" aria-modal="true" aria-labelledby="welcomeText">
-  <div class="modal-card">
-    <img src="assets/logo.png?v=32" alt="GCCB">
-    <p id="welcomeText">The mode switches automatically: <b>Live location</b> when your GPS dot is on the hole you're viewing, <b>Shot planner</b> otherwise (tap to measure). <b>Map</b> lets you nudge any hole's calibration pins.</p>
-    <button id="welcomeOk" type="button">Got it</button>
-  </div>
-</div>
-
-<div id="calModal" hidden role="dialog" aria-modal="true" aria-label="OSM calibration">
-  <div class="cal-header">
-    <h2>Map calibration</h2>
-    <select id="calHoleSelect" aria-label="Hole"></select>
-    <button id="calCloseBtn" class="icon" type="button" aria-label="Close">✕</button>
-  </div>
-  <div class="cal-help">
-    Drag the <b>green</b> pin onto the middle of the green and the <b>white</b> pin onto the white teebox of the selected hole. Save to lock in the mapping for that hole.
-  </div>
-  <div class="cal-body">
-    <div id="calMap"></div>
-  </div>
-  <div class="cal-footer">
-    <button id="calUseGpsGreen" type="button">Green = my GPS</button>
-    <button id="calUseGpsWhite" type="button">White tee = my GPS</button>
-    <button id="calClearBtn" class="danger" type="button">Clear hole</button>
-    <button id="calSaveBtn" class="primary" type="button">Save</button>
-  </div>
-</div>
-
-<script src="app.js?v=32"></script>
+<script src="game.js"></script>
 </body>
 </html>
