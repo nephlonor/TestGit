@@ -13,7 +13,12 @@ Eine bunte, minimalistische Loop-Box zum Aufnehmen — gebaut für Kinder.
    (mit kurzer Nachfrage, damit nichts aus Versehen wegkommt).
 4. **Loop-Box**: Wird im selben Ordner eine neue Aufnahme gestartet, laufen
    alle alten Aufnahmen des Ordners als Endlos-Loop mit — so entstehen
-   Schicht für Schicht kleine Songs.
+   Schicht für Schicht kleine Songs. Der **Play-Knopf** neben dem + spielt
+   alle Spuren gleichzeitig als Endlos-Loop ab (nochmal drücken stoppt).
+   Damit alles synchron bleibt, wird jede neue Aufnahme automatisch auf
+   ein **Vielfaches der ersten Aufnahme** gebracht: Ist sie nur knapp
+   (≈1 s) über dem Takt, wird gekürzt — sonst wird auf das nächste
+   Vielfache aufgerundet und mit Stille aufgefüllt.
 5. **Export** (Pfeil oben rechts im Ordner): mischt alle Aufnahmen des
    Ordners (kürzere werden geloopt) und erstellt ein **Video** mit der
    Ordnerfarbe als Hintergrund — auf dem iPhone lässt es sich über den

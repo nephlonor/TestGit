@@ -14,7 +14,12 @@ held other prototypes; they were fully removed.
   is a folder. Badge shows the recording count.
 - Inside a folder: numbered recording blocks + a big `+` button that
   starts/stops a recording. While recording, all existing recordings of
-  that folder play as endless loops (loop-box layering).
+  that folder play as endless loops (loop-box layering). A play button
+  next to `+` loops ALL tracks simultaneously (`loopAll` state).
+- Loop sync: every new recording is quantised to a multiple of the
+  shortest existing recording (the "bar"). Slightly over the bar (≤ ~1 s
+  or 25% of the bar) → trimmed down; clearly longer → rounded UP to the
+  next multiple and padded with silence (see `finishRecording`).
 - Tapping a block plays it — no player UI, just a dot sliding across the
   block; dragging the dot seeks. `×` deletes (two-step confirm).
 - Export (arrow icon in folder header): offline-renders a mix of all
