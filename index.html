@@ -189,6 +189,27 @@
     font-size: 1rem;
     opacity: 0.95;
   }
+  #recRow {
+    display: flex;
+    align-items: center;
+    gap: 26px;
+  }
+  #playAllBtn {
+    width: 62px; height: 62px;
+    border-radius: 50%;
+    background: #fff;
+    color: var(--ink);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+    transition: transform 0.12s ease;
+  }
+  #playAllBtn:active { transform: scale(0.94); }
+  #playAllBtn .tri { width: 26px; height: 26px; margin-left: 3px; }
+  #playAllBtn .sq { display: none; width: 20px; height: 20px; border-radius: 5px; background: var(--ink); }
+  #playAllBtn.on .tri { display: none; }
+  #playAllBtn.on .sq { display: block; }
+  .recSpacer { width: 62px; flex: 0 0 auto; }
+  #recRow.recording #playAllBtn { visibility: hidden; }
   #recBtn {
     width: 86px; height: 86px;
     border-radius: 50%;
@@ -358,10 +379,19 @@
   <div id="blocks"></div>
   <div id="recArea">
     <div id="recTimer"></div>
-    <button id="recBtn" aria-label="Aufnahme">
-      <span class="plus">+</span>
-      <span class="stop"></span>
-    </button>
+    <div id="recRow">
+      <button id="playAllBtn" aria-label="Alle Spuren abspielen">
+        <svg class="tri" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M8 5.5v13c0 .8.9 1.3 1.6.9l10.4-6.5c.7-.4.7-1.4 0-1.8L9.6 4.6c-.7-.4-1.6.1-1.6.9z"/>
+        </svg>
+        <span class="sq"></span>
+      </button>
+      <button id="recBtn" aria-label="Aufnahme">
+        <span class="plus">+</span>
+        <span class="stop"></span>
+      </button>
+      <div class="recSpacer"></div>
+    </div>
   </div>
 </div>
 
@@ -402,6 +432,6 @@
 
 <div id="toast"></div>
 
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>

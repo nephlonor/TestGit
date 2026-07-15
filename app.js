@@ -12,7 +12,7 @@
  */
 "use strict";
 
-const APP_VERSION = 3; // sichtbar unter Zahnrad → zeigt, welche Version läuft
+const APP_VERSION = 4; // sichtbar unter Zahnrad → zeigt, welche Version läuft
 
 // ---------------------------------------------------------------------------
 // Ordner (feste Farbpalette)
@@ -248,6 +248,7 @@ function makeBlock(rec) {
       else stopPlayer(rec);
       drag = null;
     } else {
+      if (loopAll.active) stopLoopAll();
       startPlayer(rec, 0);
     }
     e.preventDefault();
@@ -271,6 +272,7 @@ function makeBlock(rec) {
     }
     clearTimeout(confirmTimer);
     stopPlayer(rec);
+    stopLoopAllTrack(rec);
     await dbDel(rec.id);
     bufferCache.delete(rec.id);
     recs = recs.filter((r) => r.id !== rec.id);
@@ -349,6 +351,61 @@ function positionDot(rec, frac) {
 function stopAllPlayback() {
   for (const rec of recs) stopPlayer(rec);
   players.clear();
+  stopLoopAll();
+}
+
+// --- Alle Spuren gleichzeitig, geloopt (Play-Button neben dem +) ---------
+// Da jede Aufnahme ein Vielfaches der Basis-Länge ist, bleiben alle Spuren
+// beim Loopen automatisch synchron.
+const loopAll = { active: false, sources: new Map(), startedAt: 0 };
+
+async function startLoopAll() {
+  if (recActive || starting) return;
+  if (!recs.length) { toast("Noch keine Aufnahme in diesem Ordner"); return; }
+  ensureCtx();
+  stopAllPlayback();
+  const list = [];
+  for (const rec of recs) {
+    try { list.push([rec, await bufferOf(rec)]); } catch (_) {}
+  }
+  if (!list.length) return;
+  const t0 = AC.currentTime + 0.06; // gemeinsamer Startpunkt für alle Spuren
+  for (const [rec, buf] of list) {
+    const src = AC.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    src.connect(AC.destination);
+    src.start(t0);
+    loopAll.sources.set(rec.id, src);
+    const el = blockEl(rec);
+    if (el) el.classList.add("playing");
+  }
+  loopAll.active = true;
+  loopAll.startedAt = t0;
+  $("playAllBtn").classList.add("on");
+}
+
+function stopLoopAll() {
+  if (!loopAll.active && loopAll.sources.size === 0) return;
+  for (const src of loopAll.sources.values()) {
+    try { src.stop(); } catch (_) {}
+  }
+  loopAll.sources.clear();
+  loopAll.active = false;
+  $("playAllBtn").classList.remove("on");
+  for (const rec of recs) {
+    const el = blockEl(rec);
+    if (el && !players.has(rec.id)) el.classList.remove("playing");
+  }
+}
+
+function stopLoopAllTrack(rec) {
+  const src = loopAll.sources.get(rec.id);
+  if (src) {
+    try { src.stop(); } catch (_) {}
+    loopAll.sources.delete(rec.id);
+  }
+  if (loopAll.active && loopAll.sources.size === 0) stopLoopAll();
 }
 
 // Punkt-Animation
@@ -357,9 +414,13 @@ function tick() {
   if (!currentFolder) return;
   for (const rec of recs) {
     const p = players.get(rec.id);
-    if (!p) continue;
-    const t = p.playing ? p.offset + (AC.currentTime - p.startedAt) : p.offset;
-    positionDot(rec, Math.max(0, Math.min(1, t / rec.duration)));
+    if (p) {
+      const t = p.playing ? p.offset + (AC.currentTime - p.startedAt) : p.offset;
+      positionDot(rec, Math.max(0, Math.min(1, t / rec.duration)));
+    } else if (loopAll.active && loopAll.sources.has(rec.id)) {
+      const t = Math.max(0, AC.currentTime - loopAll.startedAt) % rec.duration;
+      positionDot(rec, t / rec.duration);
+    }
   }
 }
 requestAnimationFrame(tick);
@@ -498,6 +559,7 @@ async function startRecording() {
 
     recStart = performance.now();
     recBtn.classList.add("recording");
+    $("recRow").classList.add("recording");
     recTimer.textContent = "0:00";
     recTimerInt = setInterval(() => {
       recTimer.textContent = fmtDur((performance.now() - recStart) / 1000);
@@ -508,6 +570,8 @@ async function startRecording() {
     stopLoops();
     teardownRecGraph();
     recActive = false;
+    recBtn.classList.remove("recording");
+    $("recRow").classList.remove("recording");
   } finally {
     starting = false;
   }
@@ -526,6 +590,7 @@ function stopRecording() {
   stopLoops();
   teardownRecGraph();
   recBtn.classList.remove("recording");
+  $("recRow").classList.remove("recording");
   recTimer.textContent = "";
   finishRecording();
 }
@@ -539,11 +604,33 @@ async function finishRecording() {
     toast("Zu kurz — einfach nochmal probieren");
     return;
   }
+
+  // Takt-Quantisierung: jede Aufnahme wird ein Vielfaches der ersten
+  // (genauer: der kürzesten vorhandenen) Aufnahme, damit Loops synchron
+  // bleiben. Nur knapp über dem Takt (≈1 s) wird gekürzt; sonst wird auf
+  // das nächste Vielfache AUFgerundet und mit Stille aufgefüllt.
+  let target = len;
+  if (recs.length) {
+    const base = Math.round(Math.min(...recs.map((r) => r.duration)) * AC.sampleRate);
+    if (base > 0) {
+      const nDown = Math.max(1, Math.floor(len / base));
+      const rest = len - nDown * base;
+      const tol = Math.min(1.0 * AC.sampleRate, 0.25 * base);
+      const n = (rest <= tol || len < base) ? nDown : nDown + 1;
+      target = n * base;
+    }
+  }
+
   // Kein Encoder, kein Decoder: die Samples werden direkt zum AudioBuffer.
-  const buf = AC.createBuffer(1, len, AC.sampleRate);
+  // Ist die Aufnahme kürzer als das Ziel, bleibt der Rest Stille.
+  const buf = AC.createBuffer(1, target, AC.sampleRate);
   const data = buf.getChannelData(0);
   let o = 0;
-  for (const c of chunks) { data.set(c, o); o += c.length; }
+  for (const c of chunks) {
+    if (o >= target) break;
+    data.set(o + c.length <= target ? c : c.subarray(0, target - o), o);
+    o += c.length;
+  }
 
   const num = recs.reduce((m, r) => Math.max(m, r.num), 0) + 1;
   const rec = {
@@ -569,6 +656,11 @@ async function finishRecording() {
 recBtn.addEventListener("click", () => {
   if (recActive) stopRecording();
   else startRecording();
+});
+
+$("playAllBtn").addEventListener("click", () => {
+  if (loopAll.active) stopLoopAll();
+  else startLoopAll();
 });
 
 // ---------------------------------------------------------------------------
