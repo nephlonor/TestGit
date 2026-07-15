@@ -1,0 +1,50 @@
+# CLAUDE.md
+
+## Project
+
+**Loopbox** — a minimalist loop-box audio recording web app for a child.
+UI language is **German**. Static site, vanilla JS, no dependencies, no
+build step. Deployed to GitHub Pages on push to `main`
+(`.github/workflows/pages.yml`, serves the repo root). This repo previously
+held other prototypes; they were fully removed.
+
+## Concept
+
+- Home screen: 2×4 grid of colour tiles (`FOLDERS` in `app.js`); each tile
+  is a folder. Badge shows the recording count.
+- Inside a folder: numbered recording blocks + a big `+` button that
+  starts/stops a recording. While recording, all existing recordings of
+  that folder play as endless loops (loop-box layering).
+- Tapping a block plays it — no player UI, just a dot sliding across the
+  block; dragging the dot seeks. `×` deletes (two-step confirm).
+- Export (arrow icon in folder header): offline-renders a mix of all
+  folder recordings (shorter ones looped to the longest), then records a
+  solid-colour canvas + the mix in realtime via MediaRecorder into a
+  video (mp4 on Safari, webm elsewhere) and offers `navigator.share`
+  (→ iOS Photos) with download fallback.
+- Settings gear (home screen): toggles for countdown and
+  loops-while-recording, persisted in `localStorage` (`lb.*`).
+
+## Architecture
+
+Two files: `index.html` (markup + all CSS) and `app.js`, organised in
+sections: folders/settings, IndexedDB (`loopbox` db, `recs` store keyed by
+`id`, indexed by `folder`; blobs stored directly), Web Audio (lazy
+`AudioContext`, decoded-buffer cache), grid view, blocks & playback
+(per-recording player objects in `players` map; rAF loop positions dots),
+recording (MediaRecorder; mime picked via `isTypeSupported` — `audio/mp4`
+on Safari, `audio/webm` on Chrome), export, settings UI.
+
+## Gotchas
+
+- `AudioContext` must be created/resumed from a user gesture (done in
+  `openFolder` / `startRecording`).
+- iOS 17+: `navigator.share` needs transient user activation, which is
+  lost after the realtime export — hence the explicit "Video sichern"
+  button in the export overlay.
+- `decodeAudioData` is used for durations and looping; keep recordings in
+  formats the same browser can decode (they are, since it recorded them).
+- Recording is capped at `MAX_REC_SECONDS` (safety).
+- Testing: `python3 -m http.server`; headless Chromium needs
+  `--use-fake-ui-for-media-stream --use-fake-device-for-media-stream`
+  for mic access. On-device testing needs HTTPS (Pages URL).
