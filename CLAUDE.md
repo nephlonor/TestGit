@@ -28,7 +28,17 @@ held other prototypes; they were fully removed.
   video (mp4 on Safari, webm elsewhere) and offers `navigator.share`
   (→ iOS Photos) with download fallback.
 - Settings gear (home screen): toggles for countdown and
-  loops-while-recording, persisted in `localStorage` (`lb.*`).
+  loops-while-recording plus metronome BPM stepper, persisted in
+  `localStorage` (`lb.*`).
+- Metronome: per-folder toggle in the folder header (`lb.metro.<id>`,
+  default ON). Clicks (WebAudio osc, lookahead scheduling on the AC
+  clock) during recording; with countdown on, a 4-beat count-in replaces
+  3-2-1. The FIRST recording of a folder is rounded to whole beats so
+  the folder's bar matches the metronome grid.
+- Per-track mute: speaker icon on each block (`rec.muted`, persisted).
+  Muted tracks are excluded from play-all, loops-while-recording and
+  export; live mute/unmute re-enters loops phase-aligned. Direct tap
+  still plays a muted block.
 
 ## Architecture
 

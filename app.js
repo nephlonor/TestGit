@@ -12,7 +12,7 @@
  */
 "use strict";
 
-const APP_VERSION = 4; // sichtbar unter Zahnrad → zeigt, welche Version läuft
+const APP_VERSION = 5; // sichtbar unter Zahnrad → zeigt, welche Version läuft
 
 // ---------------------------------------------------------------------------
 // Ordner (feste Farbpalette)
@@ -36,10 +36,20 @@ const MAX_REC_SECONDS = 300; // Sicherheitslimit pro Aufnahme
 const settings = {
   countdown: localStorage.getItem("lb.countdown") !== "0",
   loops: localStorage.getItem("lb.loops") !== "0",
+  bpm: parseInt(localStorage.getItem("lb.bpm") || "90", 10) || 90,
 };
 function saveSettings() {
   localStorage.setItem("lb.countdown", settings.countdown ? "1" : "0");
   localStorage.setItem("lb.loops", settings.loops ? "1" : "0");
+  localStorage.setItem("lb.bpm", String(settings.bpm));
+}
+
+// Metronom pro Ordner, standardmäßig AN bei neuen Ordnern.
+function metroEnabled(folderId) {
+  return localStorage.getItem("lb.metro." + folderId) !== "0";
+}
+function setMetroEnabled(folderId, on) {
+  localStorage.setItem("lb.metro." + folderId, on ? "1" : "0");
 }
 
 // ---------------------------------------------------------------------------
@@ -157,6 +167,7 @@ async function openFolder(f) {
   document.querySelector('meta[name="theme-color"]').content = f.color;
   gridView.hidden = true;
   folderView.hidden = false;
+  $("metroBtn").classList.toggle("off", !metroEnabled(f.id));
   recs = await dbAll(f.id);
   renderBlocks();
 }
@@ -210,6 +221,18 @@ function makeBlock(rec) {
   dur.className = "dur";
   dur.textContent = fmtDur(rec.duration);
 
+  const mute = document.createElement("button");
+  mute.className = "mute";
+  mute.setAttribute("aria-label", "Stumm schalten");
+  mute.innerHTML =
+    '<svg class="muteOn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M11 5L6.5 9H3v6h3.5L11 19V5z" fill="currentColor" stroke="none"/>' +
+    '<path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.2 6a9 9 0 0 1 0 12"/></svg>' +
+    '<svg class="muteOff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M11 5L6.5 9H3v6h3.5L11 19V5z" fill="currentColor" stroke="none"/>' +
+    '<path d="M15.5 9.5l5 5"/><path d="M20.5 9.5l-5 5"/></svg>';
+  if (rec.muted) el.classList.add("muted");
+
   const del = document.createElement("button");
   del.className = "del";
   del.textContent = "×";
@@ -218,7 +241,10 @@ function makeBlock(rec) {
   el.appendChild(num);
   el.appendChild(track);
   el.appendChild(dur);
+  el.appendChild(mute);
   el.appendChild(del);
+
+  mute.addEventListener("click", () => setMuted(rec, !rec.muted));
 
   // Antippen: Wiedergabe starten/stoppen. Ziehen am Punkt: spulen.
   let drag = null;
@@ -366,9 +392,10 @@ async function startLoopAll() {
   stopAllPlayback();
   const list = [];
   for (const rec of recs) {
+    if (rec.muted) continue;
     try { list.push([rec, await bufferOf(rec)]); } catch (_) {}
   }
-  if (!list.length) return;
+  if (!list.length) { toast("Alle Spuren sind stummgeschaltet"); return; }
   const t0 = AC.currentTime + 0.06; // gemeinsamer Startpunkt für alle Spuren
   for (const [rec, buf] of list) {
     const src = AC.createBufferSource();
@@ -408,6 +435,96 @@ function stopLoopAllTrack(rec) {
   if (loopAll.active && loopAll.sources.size === 0) stopLoopAll();
 }
 
+// --- Stummschalten einzelner Spuren ---------------------------------------
+// Wirkt auf Play-All, Loops beim Aufnehmen und den Export. Direktes
+// Antippen eines Blocks spielt ihn weiterhin ab (bewusste Aktion).
+async function setMuted(rec, muted) {
+  rec.muted = muted;
+  const el = blockEl(rec);
+  if (el) el.classList.toggle("muted", muted);
+  dbPut(rec).catch(() => {});
+  if (muted) stopPlayer(rec);
+
+  // Läuft Play-All: Spur live entfernen bzw. taktgenau wieder einsetzen.
+  if (loopAll.active) {
+    if (muted) {
+      const src = loopAll.sources.get(rec.id);
+      if (src) { try { src.stop(); } catch (_) {} loopAll.sources.delete(rec.id); }
+    } else if (!loopAll.sources.has(rec.id)) {
+      try {
+        const buf = await bufferOf(rec);
+        if (!loopAll.active) return;
+        const src = AC.createBufferSource();
+        src.buffer = buf;
+        src.loop = true;
+        src.connect(AC.destination);
+        src.start(0, Math.max(0, AC.currentTime - loopAll.startedAt) % rec.duration);
+        loopAll.sources.set(rec.id, src);
+        if (el) el.classList.add("playing");
+      } catch (_) {}
+    }
+    if (muted && el) el.classList.remove("playing");
+  }
+
+  // Läuft eine Aufnahme: Hintergrund-Loop live entfernen / wieder einsetzen.
+  if (recActive) {
+    if (muted) {
+      const src = loopSources.get(rec.id);
+      if (src) { try { src.stop(); } catch (_) {} loopSources.delete(rec.id); }
+    } else if (settings.loops && !loopSources.has(rec.id)) {
+      try {
+        const buf = await bufferOf(rec);
+        if (!recActive) return;
+        const src = AC.createBufferSource();
+        src.buffer = buf;
+        src.loop = true;
+        src.connect(AC.destination);
+        src.start(0, Math.max(0, AC.currentTime - loopStartAC) % rec.duration);
+        loopSources.set(rec.id, src);
+      } catch (_) {}
+    }
+  }
+}
+
+// --- Metronom ---------------------------------------------------------------
+// Klickt während der Aufnahme (inkl. Einzähler) im eingestellten Tempo.
+// Geplant wird vorausschauend auf der AudioContext-Uhr, damit nichts jittert.
+const metro = { running: false, nextBeat: 0, beat: 0, timer: 0 };
+
+function metroClick(t, accent) {
+  const o = AC.createOscillator();
+  const g = AC.createGain();
+  o.frequency.value = accent ? 1760 : 1175;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(accent ? 0.5 : 0.3, t + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+  o.connect(g);
+  g.connect(AC.destination);
+  o.start(t);
+  o.stop(t + 0.09);
+}
+
+function startMetronome(t0) {
+  stopMetronome();
+  metro.running = true;
+  metro.nextBeat = t0;
+  metro.beat = 0;
+  const schedule = () => {
+    while (metro.nextBeat < AC.currentTime + 0.15) {
+      metroClick(metro.nextBeat, metro.beat % 4 === 0);
+      metro.beat++;
+      metro.nextBeat += 60 / settings.bpm;
+    }
+  };
+  schedule();
+  metro.timer = setInterval(schedule, 30);
+}
+
+function stopMetronome() {
+  clearInterval(metro.timer);
+  metro.running = false;
+}
+
 // Punkt-Animation
 function tick() {
   requestAnimationFrame(tick);
@@ -440,7 +557,8 @@ let recChunks = [];   // Float32Array-Stücke vom Worklet
 let recStart = 0;
 let recTimerInt = 0;
 let recSafetyTimer = 0;
-let loopSources = [];
+let loopSources = new Map(); // rec.id -> AudioBufferSourceNode
+let loopStartAC = 0;         // AC-Zeitpunkt, an dem Loops + Aufnahme starteten
 let micStream = null;
 let starting = false;
 let workletReady = null;
@@ -510,12 +628,12 @@ function wavBytes(buffer) {
   return dv.buffer;
 }
 
-async function runCountdown() {
+async function runCountdown(labels, stepMs) {
   const ov = $("countdownOverlay"), num = $("countdownNum");
   ov.hidden = false;
-  for (const n of [3, 2, 1]) {
+  for (const n of labels) {
     num.textContent = n;
-    await new Promise((r) => setTimeout(r, 700));
+    await new Promise((r) => setTimeout(r, stepMs));
   }
   ov.hidden = true;
 }
@@ -530,7 +648,28 @@ async function startRecording() {
       micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     }
     ensureCtx(); // iOS pausiert den AudioContext gern beim Mikrofonstart
-    if (settings.countdown) await runCountdown();
+    const metroOn = metroEnabled(currentFolder.id);
+    const beat = 60 / settings.bpm;
+
+    if (metroOn) {
+      // Metronom läuft ab jetzt; mit Countdown: 4 Schläge Einzähler.
+      const t0 = AC.currentTime + 0.15;
+      startMetronome(t0);
+      if (settings.countdown) {
+        await runCountdown([4, 3, 2, 1], Math.round(beat * 1000));
+      }
+    } else if (settings.countdown) {
+      await runCountdown([3, 2, 1], 700);
+    }
+
+    // Vorbereitete Buffer, damit die Loops exakt gleichzeitig starten.
+    const loopBufs = [];
+    if (settings.loops) {
+      for (const rec of recs) {
+        if (rec.muted) continue;
+        try { loopBufs.push([rec, await bufferOf(rec)]); } catch (_) {}
+      }
+    }
 
     recNode = await makeRecNode();
     recSource = AC.createMediaStreamSource(micStream);
@@ -541,20 +680,16 @@ async function startRecording() {
     recMute.connect(AC.destination); // hält die Audio-Verarbeitung am Laufen
     recChunks = [];
     recActive = true;
+    loopStartAC = AC.currentTime;
 
     // Alte Aufnahmen als Loop mitlaufen lassen — die Loop-Box.
-    if (settings.loops) {
-      for (const rec of recs) {
-        try {
-          const buf = await bufferOf(rec);
-          const src = AC.createBufferSource();
-          src.buffer = buf;
-          src.loop = true;
-          src.connect(AC.destination);
-          src.start();
-          loopSources.push(src);
-        } catch (_) { /* eine kaputte Aufnahme stoppt die Session nicht */ }
-      }
+    for (const [rec, buf] of loopBufs) {
+      const src = AC.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      src.connect(AC.destination);
+      src.start(loopStartAC);
+      loopSources.set(rec.id, src);
     }
 
     recStart = performance.now();
@@ -568,6 +703,7 @@ async function startRecording() {
   } catch (err) {
     toast("Mikrofon nicht verfügbar — bitte Zugriff erlauben");
     stopLoops();
+    stopMetronome();
     teardownRecGraph();
     recActive = false;
     recBtn.classList.remove("recording");
@@ -578,8 +714,8 @@ async function startRecording() {
 }
 
 function stopLoops() {
-  for (const s of loopSources) { try { s.stop(); } catch (_) {} }
-  loopSources = [];
+  for (const s of loopSources.values()) { try { s.stop(); } catch (_) {} }
+  loopSources.clear();
 }
 
 function stopRecording() {
@@ -588,6 +724,7 @@ function stopRecording() {
   clearInterval(recTimerInt);
   clearTimeout(recSafetyTimer);
   stopLoops();
+  stopMetronome();
   teardownRecGraph();
   recBtn.classList.remove("recording");
   $("recRow").classList.remove("recording");
@@ -619,6 +756,11 @@ async function finishRecording() {
       const n = (rest <= tol || len < base) ? nDown : nDown + 1;
       target = n * base;
     }
+  } else if (metroEnabled(currentFolder.id)) {
+    // Erste Aufnahme mit Metronom: auf ganze Schläge runden, damit der
+    // Takt des Ordners zum Metronom passt.
+    const beat = Math.round((60 / settings.bpm) * AC.sampleRate);
+    target = Math.max(1, Math.round(len / beat)) * beat;
   }
 
   // Kein Encoder, kein Decoder: die Samples werden direkt zum AudioBuffer.
@@ -684,6 +826,8 @@ function pickVideoMime() {
 async function exportFolder() {
   if (exporting || recActive) return;
   if (!recs.length) { toast("Noch keine Aufnahme in diesem Ordner"); return; }
+  const active = recs.filter((r) => !r.muted);
+  if (!active.length) { toast("Alle Spuren sind stummgeschaltet"); return; }
   exporting = true;
   stopAllPlayback();
   const overlay = $("exportOverlay");
@@ -699,9 +843,9 @@ async function exportFolder() {
 
   try {
     ensureCtx();
-    // 1) Mix rendern: alle Aufnahmen geloopt auf die Länge der längsten.
+    // 1) Mix rendern: alle nicht stummen Aufnahmen, geloopt auf die längste.
     const bufs = [];
-    for (const rec of recs) bufs.push(await bufferOf(rec));
+    for (const rec of active) bufs.push(await bufferOf(rec));
     const durSec = Math.max(...bufs.map((b) => b.duration));
     const sr = AC.sampleRate;
     const off = new OfflineAudioContext(2, Math.ceil(sr * durSec), sr);
@@ -798,6 +942,7 @@ $("exportBtn").addEventListener("click", exportFolder);
 function syncSwitches() {
   $("setCountdown").classList.toggle("on", settings.countdown);
   $("setLoops").classList.toggle("on", settings.loops);
+  $("bpmVal").textContent = settings.bpm;
 }
 $("setCountdown").addEventListener("click", () => {
   settings.countdown = !settings.countdown;
@@ -808,6 +953,22 @@ $("setLoops").addEventListener("click", () => {
   settings.loops = !settings.loops;
   saveSettings();
   syncSwitches();
+});
+$("bpmDown").addEventListener("click", () => {
+  settings.bpm = Math.max(40, settings.bpm - 5);
+  saveSettings();
+  syncSwitches();
+});
+$("bpmUp").addEventListener("click", () => {
+  settings.bpm = Math.min(200, settings.bpm + 5);
+  saveSettings();
+  syncSwitches();
+});
+$("metroBtn").addEventListener("click", () => {
+  const on = !metroEnabled(currentFolder.id);
+  setMetroEnabled(currentFolder.id, on);
+  $("metroBtn").classList.toggle("off", !on);
+  if (!on && metro.running) stopMetronome();
 });
 $("settingsBtn").addEventListener("click", () => {
   syncSwitches();
