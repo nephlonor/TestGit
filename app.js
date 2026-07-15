@@ -12,6 +12,8 @@
  */
 "use strict";
 
+const APP_VERSION = 3; // sichtbar unter Zahnrad → zeigt, welche Version läuft
+
 // ---------------------------------------------------------------------------
 // Ordner (feste Farbpalette)
 // ---------------------------------------------------------------------------
@@ -96,7 +98,9 @@ function ensureCtx() {
 const bufferCache = new Map(); // rec.id -> AudioBuffer
 async function bufferOf(rec) {
   if (bufferCache.has(rec.id)) return bufferCache.get(rec.id);
-  const raw = await rec.blob.arrayBuffer();
+  // Neue Aufnahmen liegen als ArrayBuffer in der DB (robusteste Variante in
+  // Safari); ältere Einträge können noch ein Blob tragen.
+  const raw = rec.data ? rec.data.slice(0) : await rec.blob.arrayBuffer();
   const buf = await ensureCtx().decodeAudioData(raw);
   bufferCache.set(rec.id, buf);
   return buf;
@@ -424,7 +428,7 @@ function teardownRecGraph() {
   recNode = recSource = recMute = null;
 }
 
-function wavBlob(buffer) {
+function wavBytes(buffer) {
   const n = buffer.length, sr = buffer.sampleRate;
   const dv = new DataView(new ArrayBuffer(44 + n * 2));
   const wstr = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
@@ -442,7 +446,7 @@ function wavBlob(buffer) {
     const s = Math.max(-1, Math.min(1, d[i]));
     dv.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
   }
-  return new Blob([dv.buffer], { type: "audio/wav" });
+  return dv.buffer;
 }
 
 async function runCountdown() {
@@ -546,7 +550,7 @@ async function finishRecording() {
     id: Date.now() + "-" + Math.random().toString(36).slice(2, 7),
     folder: currentFolder.id,
     num,
-    blob: wavBlob(buf),
+    data: wavBytes(buf), // ArrayBuffer statt Blob: zuverlässiger in Safari-IDB
     duration: buf.duration,
     createdAt: Date.now(),
   };
@@ -556,9 +560,9 @@ async function finishRecording() {
   blocksEl.scrollTop = blocksEl.scrollHeight;
   try {
     await dbPut(rec);
-  } catch (_) {
+  } catch (err) {
     // Block bleibt für diese Sitzung nutzbar, nur das Speichern schlug fehl.
-    toast("Achtung: Aufnahme konnte nicht dauerhaft gespeichert werden");
+    toast("Achtung: nicht dauerhaft gespeichert (" + (err && err.name || "Fehler") + ")");
   }
 }
 
@@ -715,6 +719,7 @@ $("setLoops").addEventListener("click", () => {
 });
 $("settingsBtn").addEventListener("click", () => {
   syncSwitches();
+  $("appVersion").textContent = "Loopbox · Version " + APP_VERSION;
   $("settingsOverlay").hidden = false;
 });
 $("settingsClose").addEventListener("click", () => {
