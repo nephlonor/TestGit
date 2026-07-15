@@ -97,6 +97,9 @@
   }
   #folderView header .iconBtn { color: #fff; }
   #folderView header .iconBtn:active { background: rgba(255, 255, 255, 0.18); }
+  #metroBtn .metroOff { display: none; }
+  #metroBtn.off { opacity: 0.55; }
+  #metroBtn.off .metroOff { display: block; }
 
   #blocks {
     flex: 1;
@@ -156,6 +159,20 @@
     flex: 0 0 auto;
     margin-right: 2px;
   }
+  .block .mute {
+    width: 40px; height: 40px;
+    flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0.4;
+    border-radius: 50%;
+  }
+  .block .mute svg { width: 20px; height: 20px; }
+  .block .mute .muteOff { display: none; }
+  .block .mute:active { background: rgba(0, 0, 0, 0.07); }
+  .block.muted .num, .block.muted .track, .block.muted .dur { opacity: 0.35; }
+  .block.muted .mute { opacity: 0.85; }
+  .block.muted .mute .muteOn { display: none; }
+  .block.muted .mute .muteOff { display: block; }
   .block .del {
     width: 44px; height: 44px;
     flex: 0 0 auto;
@@ -294,6 +311,27 @@
   }
   .switch.on { background: #34c759; }
   .switch.on::after { left: 23px; }
+  .stepper {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
+  }
+  .stepper button {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    background: #eceae4;
+    font-size: 1.3rem;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .stepper button:active { background: #ddd9d0; }
+  .stepper span {
+    min-width: 44px;
+    text-align: center;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
   .sheet .primary {
     margin-top: 20px;
     width: 100%;
@@ -368,13 +406,23 @@
         <path d="M15 18l-6-6 6-6"/>
       </svg>
     </button>
-    <button id="exportBtn" class="iconBtn" aria-label="Exportieren">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 15V4"/>
-        <path d="M7.5 8.5L12 4l4.5 4.5"/>
-        <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>
-      </svg>
-    </button>
+    <div style="display:flex;gap:6px;">
+      <button id="metroBtn" class="iconBtn" aria-label="Metronom">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9.5 3h5L18 20a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L9.5 3z"/>
+          <path d="M12 14L17.5 5.5"/>
+          <circle cx="12" cy="14.6" r="1.4" fill="currentColor" stroke="none"/>
+          <path class="metroOff" d="M4 4l16 16" stroke-width="2.4"/>
+        </svg>
+      </button>
+      <button id="exportBtn" class="iconBtn" aria-label="Exportieren">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 15V4"/>
+          <path d="M7.5 8.5L12 4l4.5 4.5"/>
+          <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>
+        </svg>
+      </button>
+    </div>
   </header>
   <div id="blocks"></div>
   <div id="recArea">
@@ -401,9 +449,20 @@
     <div class="setting">
       <div>
         <div class="lbl">Countdown vor der Aufnahme</div>
-        <div class="hint">3 · 2 · 1 bevor es losgeht</div>
+        <div class="hint">3 · 2 · 1 — mit Metronom: 4 Schläge Einzähler</div>
       </div>
       <button class="switch" id="setCountdown" aria-label="Countdown"></button>
+    </div>
+    <div class="setting">
+      <div>
+        <div class="lbl">Tempo</div>
+        <div class="hint">Schläge pro Minute fürs Metronom</div>
+      </div>
+      <div class="stepper">
+        <button id="bpmDown" aria-label="Langsamer">−</button>
+        <span id="bpmVal">90</span>
+        <button id="bpmUp" aria-label="Schneller">+</button>
+      </div>
     </div>
     <div class="setting">
       <div>
@@ -432,6 +491,6 @@
 
 <div id="toast"></div>
 
-<script src="app.js?v=4"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>

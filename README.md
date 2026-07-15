@@ -23,8 +23,15 @@ Eine bunte, minimalistische Loop-Box zum Aufnehmen — gebaut für Kinder.
    Ordners (kürzere werden geloopt) und erstellt ein **Video** mit der
    Ordnerfarbe als Hintergrund — auf dem iPhone lässt es sich über den
    Teilen-Dialog direkt in **Fotos sichern**.
-6. **Zahnrad** (Startbildschirm): Countdown und „Loops beim Aufnehmen"
-   ein-/ausschalten.
+6. **Metronom** (Symbol oben im Ordner): tickt beim Aufnehmen im
+   eingestellten Tempo — bei neuen Ordnern standardmäßig an. Mit
+   Countdown gibt es einen 4-Schläge-Einzähler auf dem Beat; die erste
+   Aufnahme wird auf ganze Schläge gerundet, damit alles zum Takt passt.
+7. **Stumm schalten**: das Lautsprecher-Symbol im Block nimmt die Spur
+   aus Play-All, aus den Loops beim Aufnehmen und aus dem Export —
+   direktes Antippen spielt sie weiterhin ab.
+8. **Zahnrad** (Startbildschirm): Countdown, „Loops beim Aufnehmen" und
+   das Metronom-Tempo (BPM) einstellen.
 
 Alle Aufnahmen bleiben auf dem Gerät gespeichert (IndexedDB) — auch nach
 dem Schließen der App.
