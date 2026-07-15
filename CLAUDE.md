@@ -32,8 +32,8 @@ sections: folders/settings, IndexedDB (`loopbox` db, `recs` store keyed by
 `id`, indexed by `folder`; blobs stored directly), Web Audio (lazy
 `AudioContext`, decoded-buffer cache), grid view, blocks & playback
 (per-recording player objects in `players` map; rAF loop positions dots),
-recording (MediaRecorder; mime picked via `isTypeSupported` — `audio/mp4`
-on Safari, `audio/webm` on Chrome), export, settings UI.
+recording (raw PCM via AudioWorklet with ScriptProcessor fallback, stored
+as 16-bit mono WAV), export, settings UI.
 
 ## Gotchas
 
@@ -42,8 +42,12 @@ on Safari, `audio/webm` on Chrome), export, settings UI.
 - iOS 17+: `navigator.share` needs transient user activation, which is
   lost after the realtime export — hence the explicit "Video sichern"
   button in the export overlay.
-- `decodeAudioData` is used for durations and looping; keep recordings in
-  formats the same browser can decode (they are, since it recorded them).
+- Recording deliberately does NOT use MediaRecorder: iOS Safari emits
+  fragmented MP4 that `decodeAudioData` often cannot parse (save failed
+  for the user with "Aufnahme konnte nicht gespeichert werden"), and
+  AAC/Opus encoder priming silence breaks gapless loops. Raw PCM → WAV
+  avoids both; `decodeAudioData` is only used to load WAV blobs from
+  IndexedDB, which every browser handles.
 - Recording is capped at `MAX_REC_SECONDS` (safety).
 - Testing: `python3 -m http.server`; headless Chromium needs
   `--use-fake-ui-for-media-stream --use-fake-device-for-media-stream`

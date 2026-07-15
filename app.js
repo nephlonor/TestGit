@@ -159,7 +159,11 @@ async function openFolder(f) {
 
 function closeFolder() {
   stopAllPlayback();
-  if (recorder) stopRecording();
+  if (recActive) stopRecording();
+  if (micStream) {
+    micStream.getTracks().forEach((t) => t.stop()); // Mikrofon-Anzeige aus
+    micStream = null;
+  }
   currentFolder = null;
   folderView.hidden = true;
   gridView.hidden = false;
@@ -358,22 +362,87 @@ requestAnimationFrame(tick);
 
 // ---------------------------------------------------------------------------
 // Aufnahme (+ Loops im Hintergrund)
+//
+// Aufgenommen wird rohes PCM über Web Audio (AudioWorklet, Fallback
+// ScriptProcessor) und als WAV gespeichert — nicht über MediaRecorder.
+// Grund: iOS Safari erzeugt fragmentierte MP4s, die decodeAudioData oft
+// nicht lesen kann ("Aufnahme konnte nicht gespeichert werden"), und
+// AAC/Opus-Encoder fügen Stille am Anfang ein, die Loops unsauber macht.
 // ---------------------------------------------------------------------------
-let recorder = null;
-let recChunks = [];
+let recActive = false;
+let recNode = null, recSource = null, recMute = null;
+let recChunks = [];   // Float32Array-Stücke vom Worklet
 let recStart = 0;
 let recTimerInt = 0;
 let recSafetyTimer = 0;
 let loopSources = [];
 let micStream = null;
 let starting = false;
+let workletReady = null;
 
-function pickAudioMime() {
-  const candidates = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"];
-  for (const c of candidates) {
-    if (window.MediaRecorder && MediaRecorder.isTypeSupported(c)) return c;
+function loadWorklet() {
+  if (!AC.audioWorklet) return Promise.reject(new Error("kein AudioWorklet"));
+  if (!workletReady) {
+    const code = `registerProcessor("lb-rec", class extends AudioWorkletProcessor {
+      process(inputs) {
+        const ch = inputs[0] && inputs[0][0];
+        if (ch) this.port.postMessage(ch.slice(0));
+        return true;
+      }
+    });`;
+    const url = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
+    workletReady = AC.audioWorklet.addModule(url);
   }
-  return "";
+  return workletReady;
+}
+
+async function makeRecNode() {
+  try {
+    await loadWorklet();
+    const node = new AudioWorkletNode(AC, "lb-rec", {
+      numberOfInputs: 1,
+      numberOfOutputs: 1,
+      channelCount: 1,
+      channelCountMode: "explicit",
+    });
+    node.port.onmessage = (e) => { if (recActive) recChunks.push(e.data); };
+    return node;
+  } catch (_) {
+    const node = AC.createScriptProcessor(4096, 1, 1);
+    node.onaudioprocess = (e) => {
+      if (recActive) recChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+    };
+    return node;
+  }
+}
+
+function teardownRecGraph() {
+  try { if (recSource) recSource.disconnect(); } catch (_) {}
+  try { if (recNode) recNode.disconnect(); } catch (_) {}
+  try { if (recMute) recMute.disconnect(); } catch (_) {}
+  if (recNode && recNode.port) recNode.port.onmessage = null;
+  recNode = recSource = recMute = null;
+}
+
+function wavBlob(buffer) {
+  const n = buffer.length, sr = buffer.sampleRate;
+  const dv = new DataView(new ArrayBuffer(44 + n * 2));
+  const wstr = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+  wstr(0, "RIFF"); dv.setUint32(4, 36 + n * 2, true); wstr(8, "WAVE");
+  wstr(12, "fmt "); dv.setUint32(16, 16, true);
+  dv.setUint16(20, 1, true);          // PCM
+  dv.setUint16(22, 1, true);          // mono
+  dv.setUint32(24, sr, true);
+  dv.setUint32(28, sr * 2, true);
+  dv.setUint16(32, 2, true);
+  dv.setUint16(34, 16, true);
+  wstr(36, "data"); dv.setUint32(40, n * 2, true);
+  const d = buffer.getChannelData(0);
+  for (let i = 0; i < n; i++) {
+    const s = Math.max(-1, Math.min(1, d[i]));
+    dv.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return new Blob([dv.buffer], { type: "audio/wav" });
 }
 
 async function runCountdown() {
@@ -387,7 +456,7 @@ async function runCountdown() {
 }
 
 async function startRecording() {
-  if (recorder || starting) return;
+  if (recActive || starting) return;
   starting = true;
   try {
     ensureCtx();
@@ -395,7 +464,18 @@ async function startRecording() {
     if (!micStream || !micStream.active) {
       micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     }
+    ensureCtx(); // iOS pausiert den AudioContext gern beim Mikrofonstart
     if (settings.countdown) await runCountdown();
+
+    recNode = await makeRecNode();
+    recSource = AC.createMediaStreamSource(micStream);
+    recMute = AC.createGain();
+    recMute.gain.value = 0; // nicht mithören, nur aufnehmen
+    recSource.connect(recNode);
+    recNode.connect(recMute);
+    recMute.connect(AC.destination); // hält die Audio-Verarbeitung am Laufen
+    recChunks = [];
+    recActive = true;
 
     // Alte Aufnahmen als Loop mitlaufen lassen — die Loop-Box.
     if (settings.loops) {
@@ -412,13 +492,6 @@ async function startRecording() {
       }
     }
 
-    const mime = pickAudioMime();
-    recorder = new MediaRecorder(micStream, mime ? { mimeType: mime } : undefined);
-    recChunks = [];
-    recorder.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
-    recorder.onstop = onRecordingStopped;
-    recorder.start();
-
     recStart = performance.now();
     recBtn.classList.add("recording");
     recTimer.textContent = "0:00";
@@ -429,6 +502,8 @@ async function startRecording() {
   } catch (err) {
     toast("Mikrofon nicht verfügbar — bitte Zugriff erlauben");
     stopLoops();
+    teardownRecGraph();
+    recActive = false;
   } finally {
     starting = false;
   }
@@ -440,45 +515,55 @@ function stopLoops() {
 }
 
 function stopRecording() {
-  if (!recorder) return;
+  if (!recActive) return;
+  recActive = false;
   clearInterval(recTimerInt);
   clearTimeout(recSafetyTimer);
   stopLoops();
+  teardownRecGraph();
   recBtn.classList.remove("recording");
   recTimer.textContent = "";
-  try { recorder.stop(); } catch (_) { recorder = null; }
+  finishRecording();
 }
 
-async function onRecordingStopped() {
-  const mime = recorder ? recorder.mimeType : "";
-  recorder = null;
-  if (!recChunks.length || !currentFolder) return;
-  const blob = new Blob(recChunks, { type: mime || "audio/webm" });
+async function finishRecording() {
+  const chunks = recChunks;
   recChunks = [];
+  if (!currentFolder || !chunks.length) return;
+  const len = chunks.reduce((s, c) => s + c.length, 0);
+  if (len / AC.sampleRate < 0.3) {
+    toast("Zu kurz — einfach nochmal probieren");
+    return;
+  }
+  // Kein Encoder, kein Decoder: die Samples werden direkt zum AudioBuffer.
+  const buf = AC.createBuffer(1, len, AC.sampleRate);
+  const data = buf.getChannelData(0);
+  let o = 0;
+  for (const c of chunks) { data.set(c, o); o += c.length; }
+
+  const num = recs.reduce((m, r) => Math.max(m, r.num), 0) + 1;
+  const rec = {
+    id: Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+    folder: currentFolder.id,
+    num,
+    blob: wavBlob(buf),
+    duration: buf.duration,
+    createdAt: Date.now(),
+  };
+  bufferCache.set(rec.id, buf);
+  recs.push(rec);
+  blocksEl.appendChild(makeBlock(rec));
+  blocksEl.scrollTop = blocksEl.scrollHeight;
   try {
-    const buf = await ensureCtx().decodeAudioData(await blob.arrayBuffer());
-    if (buf.duration < 0.3) { toast("Zu kurz — halte den Knopf ruhig länger gedrückt"); return; }
-    const num = recs.reduce((m, r) => Math.max(m, r.num), 0) + 1;
-    const rec = {
-      id: Date.now() + "-" + Math.random().toString(36).slice(2, 7),
-      folder: currentFolder.id,
-      num,
-      blob,
-      duration: buf.duration,
-      createdAt: Date.now(),
-    };
-    bufferCache.set(rec.id, buf);
     await dbPut(rec);
-    recs.push(rec);
-    blocksEl.appendChild(makeBlock(rec));
-    blocksEl.scrollTop = blocksEl.scrollHeight;
   } catch (_) {
-    toast("Aufnahme konnte nicht gespeichert werden");
+    // Block bleibt für diese Sitzung nutzbar, nur das Speichern schlug fehl.
+    toast("Achtung: Aufnahme konnte nicht dauerhaft gespeichert werden");
   }
 }
 
 recBtn.addEventListener("click", () => {
-  if (recorder) stopRecording();
+  if (recActive) stopRecording();
   else startRecording();
 });
 
@@ -501,7 +586,7 @@ function pickVideoMime() {
 }
 
 async function exportFolder() {
-  if (exporting || recorder) return;
+  if (exporting || recActive) return;
   if (!recs.length) { toast("Noch keine Aufnahme in diesem Ordner"); return; }
   exporting = true;
   stopAllPlayback();
