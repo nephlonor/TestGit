@@ -1,48 +1,41 @@
-# Pump! — Dock Start Foiling
+# Loopbox
 
-A phone game about **pump foiling**, played with your phone's real motion
-sensors. Top-down view: a foil board, water, and a dock.
+Eine bunte, minimalistische Loop-Box zum Aufnehmen — gebaut für Kinder.
 
-## How to play
+## So funktioniert's
 
-1. **Dock start** — put two fingers on the board and shove it forward along
-   the dock. Keep pushing until you hit takeoff speed.
-2. **Ride the foil** — tilt the phone like it's the board:
-   - **Nose down** (tilt the top of the phone away/down): you accelerate,
-     but the board drops toward the water — the ripples grow as you get low.
-   - **Nose up** (tilt toward you): you climb away from the water, but bleed
-     speed to induced drag.
-3. **Pump** — physically push the whole phone downward during the
-   **nose-down** stroke. The accelerometer picks up the spike and converts
-   it into speed. That's the pump: down-and-forward, then rise, repeat.
-4. Find the rhythm. A perfect cycle of nose-down / pump / nose-up holds an
-   equilibrium of height and speed — and the clock keeps running.
+1. **Farbe antippen** — jede Farbkachel ist ein Ordner.
+2. **Großes + drücken** — die Aufnahme startet (auf Wunsch mit 3‑2‑1‑Countdown).
+   Nochmal drücken stoppt sie.
+3. Die Aufnahme erscheint als **nummerierter Block**. Antippen spielt sie ab:
+   ein Punkt gleitet von links nach rechts durch den Block und lässt sich
+   mit dem Finger verschieben (spulen). Das **×** rechts löscht die Aufnahme
+   (mit kurzer Nachfrage, damit nichts aus Versehen wegkommt).
+4. **Loop-Box**: Wird im selben Ordner eine neue Aufnahme gestartet, laufen
+   alle alten Aufnahmen des Ordners als Endlos-Loop mit — so entstehen
+   Schicht für Schicht kleine Songs.
+5. **Export** (Pfeil oben rechts im Ordner): mischt alle Aufnahmen des
+   Ordners (kürzere werden geloopt) und erstellt ein **Video** mit der
+   Ordnerfarbe als Hintergrund — auf dem iPhone lässt es sich über den
+   Teilen-Dialog direkt in **Fotos sichern**.
+6. **Zahnrad** (Startbildschirm): Countdown und „Loops beim Aufnehmen"
+   ein-/ausschalten.
 
-## Ways to splash
+Alle Aufnahmen bleiben auf dem Gerät gespeichert (IndexedDB) — auch nach
+dem Schließen der App.
 
-- **Touchdown** — ride height reaches the water.
-- **Breach** — climb too high, the foil leaves the water and loses all lift.
-- **Stall (nose high)** — hold the nose up too long and the foil lets go.
-- **Stall (bad pump)** — push down on the phone while the nose is still up.
-- **Too slow** — below flying speed the foil can't carry you; you sink.
+## Installation auf dem Handy
 
-Score = time on foil. Your best ride is saved on the device.
+Die App ist eine statische Web-App ohne Build-Schritt und wird per GitHub
+Pages von `main` ausgeliefert. Auf dem iPhone/iPad: Pages-URL in Safari
+öffnen → Teilen → **„Zum Home-Bildschirm"**. Mikrofon und Aufnahme
+funktionieren nur über **HTTPS** (die Pages-URL erfüllt das).
 
-## Running it
+Lokal testen: `python3 -m http.server` und `http://localhost:8000` öffnen.
 
-It's a static web app — no build step.
+## Dateien
 
-- **On your phone**: open the GitHub Pages URL for this repo (deployed
-  automatically from `main`). Add to home screen for fullscreen play.
-  Motion/tilt sensor access requires **HTTPS** and, on iOS, a permission
-  prompt (triggered by the RIDE button).
-- **Locally**: `python3 -m http.server` and open `http://localhost:8000`.
-- **On a computer** (no sensors): ↑/↓ arrows tilt the nose, Space pumps,
-  click-drag upward does the dock push.
-
-## Files
-
-- `index.html` — page shell, menu and game-over overlays
-- `game.js` — everything: sensors, physics, rendering, audio
-- `manifest.webmanifest`, `icons/` — PWA install metadata
-- `.github/workflows/pages.yml` — GitHub Pages deploy on push to `main`
+- `index.html` — Oberfläche und Styles
+- `app.js` — komplette Logik (Aufnahme, Loops, Wiedergabe, Export, Speicher)
+- `manifest.webmanifest`, `icons/` — PWA-Installation
+- `.github/workflows/pages.yml` — Deployment auf GitHub Pages

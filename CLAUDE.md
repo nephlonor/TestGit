@@ -2,60 +2,49 @@
 
 ## Project
 
-**Pump!** — a mobile-web pump-foiling game. Static site, vanilla JS, no
-dependencies, no build step. Deployed to GitHub Pages on push to `main`
-(`.github/workflows/pages.yml`, serves the repo root).
+**Loopbox** — a minimalist loop-box audio recording web app for a child.
+UI language is **German**. Static site, vanilla JS, no dependencies, no
+build step. Deployed to GitHub Pages on push to `main`
+(`.github/workflows/pages.yml`, serves the repo root). This repo previously
+held other prototypes; they were fully removed.
 
-The previous contents of this repo (a golf shot tracker) were fully removed;
-this game is a clean restart.
+## Concept
+
+- Home screen: 2×4 grid of colour tiles (`FOLDERS` in `app.js`); each tile
+  is a folder. Badge shows the recording count.
+- Inside a folder: numbered recording blocks + a big `+` button that
+  starts/stops a recording. While recording, all existing recordings of
+  that folder play as endless loops (loop-box layering).
+- Tapping a block plays it — no player UI, just a dot sliding across the
+  block; dragging the dot seeks. `×` deletes (two-step confirm).
+- Export (arrow icon in folder header): offline-renders a mix of all
+  folder recordings (shorter ones looped to the longest), then records a
+  solid-colour canvas + the mix in realtime via MediaRecorder into a
+  video (mp4 on Safari, webm elsewhere) and offers `navigator.share`
+  (→ iOS Photos) with download fallback.
+- Settings gear (home screen): toggles for countdown and
+  loops-while-recording, persisted in `localStorage` (`lb.*`).
 
 ## Architecture
 
-Everything lives in two files:
+Two files: `index.html` (markup + all CSS) and `app.js`, organised in
+sections: folders/settings, IndexedDB (`loopbox` db, `recs` store keyed by
+`id`, indexed by `folder`; blobs stored directly), Web Audio (lazy
+`AudioContext`, decoded-buffer cache), grid view, blocks & playback
+(per-recording player objects in `players` map; rAF loop positions dots),
+recording (MediaRecorder; mime picked via `isTypeSupported` — `audio/mp4`
+on Safari, `audio/webm` on Chrome), export, settings UI.
 
-- `index.html` — DOM overlays (menu, game-over), CSS, portrait-rotate hint.
-- `game.js` — one module, organised in sections:
-  - `TUNE` — **all gameplay tuning constants live here**, commented.
-  - Sensors — `deviceorientation` (beta = nose pitch, calibrated to a
-    neutral captured at takeoff, low-passed) and `devicemotion` (linear
-    acceleration envelope; a spike over `pumpThresh` = one pump pulse).
-    iOS 13+ permission requests happen in `enableSensors()` from the RIDE
-    button's user gesture. Keyboard/mouse fallback for desktop testing.
-  - Game state machine — `menu → dock → ride → splashing → over`.
-  - Physics — `stepDock` (two-finger push strokes add speed, drag decays
-    it, takeoff at `takeoffV`, running out of dock = fail) and `stepRide`
-    (see below).
-  - Effects — wake ripples (world-coordinate rings; spawn rate/size scale
-    with closeness to the water) and spray particles.
-  - Rendering — canvas, DPR-capped at 2. World scrolls past a fixed board
-    position; `worldToScreenY` maps world distance to screen.
+## Gotchas
 
-## Ride physics model (stepRide)
-
-State: `v` (speed, world px/s), `h` (ride height 0..1: 0 = water,
-1 = foil breach), pitch `p` in -1 (nose down) .. +1 (nose up).
-
-- Nose down: `v` += diveAccel (height converts to speed), `h` falls.
-- Nose up: `h` climbs scaled by lift capacity `(v/takeoffV)²`, `v` bleeds
-  (induced drag). Below takeoff speed the lift deficit sinks you.
-- Constant `settleSink` means passive riding always decays — pumping is
-  mandatory.
-- Pump pulse while `p < -pumpNoseDownMin`: speed boost. While
-  `p > pumpStallNoseUp`: stall. Near neutral: ignored.
-- Stall (bad pump, or nose held above `stallNoseUpAngle` longer than
-  `stallNoseUpTime`): lift collapses for `stallDuration`, usually ends in
-  touchdown.
-- End states: `h <= 0` touchdown, `h >= 1` breach, both → splash → game
-  over. Score = ride time, best kept in `localStorage` (`pump.best`).
-
-## Conventions & gotchas
-
-- Keep it dependency-free and single-file per concern; tune gameplay only
-  through `TUNE`.
-- Sensor code must keep working when permissions are denied or events
-  never fire (desktop) — the keyboard fallback path in `updatePitch` is
-  the guard; don't break it.
-- `e.acceleration` can be null (some Android browsers): the
-  gravity-high-pass fallback in `onMotion` handles it.
-- Test locally with `python3 -m http.server`; on-device testing needs
-  HTTPS (use the Pages deployment).
+- `AudioContext` must be created/resumed from a user gesture (done in
+  `openFolder` / `startRecording`).
+- iOS 17+: `navigator.share` needs transient user activation, which is
+  lost after the realtime export — hence the explicit "Video sichern"
+  button in the export overlay.
+- `decodeAudioData` is used for durations and looping; keep recordings in
+  formats the same browser can decode (they are, since it recorded them).
+- Recording is capped at `MAX_REC_SECONDS` (safety).
+- Testing: `python3 -m http.server`; headless Chromium needs
+  `--use-fake-ui-for-media-stream --use-fake-device-for-media-stream`
+  for mic access. On-device testing needs HTTPS (Pages URL).
