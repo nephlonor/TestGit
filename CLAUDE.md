@@ -23,7 +23,8 @@ held other prototypes; they were fully removed.
 - Tapping a block plays it — no player UI, just a dot sliding across the
   block; dragging the dot seeks. `×` deletes (two-step confirm).
 - Export (arrow icon in folder header): offline-renders a mix of all
-  folder recordings (shorter ones looped to the longest), then records a
+  non-muted folder recordings (3× the longest track; shorter ones keep
+  looping to fill), then records a
   solid-colour canvas + the mix in realtime via MediaRecorder into a
   video (mp4 on Safari, webm elsewhere) and offers `navigator.share`
   (→ iOS Photos) with download fallback.
@@ -31,7 +32,7 @@ held other prototypes; they were fully removed.
   loops-while-recording plus metronome BPM stepper, persisted in
   `localStorage` (`lb.*`).
 - Metronome: per-folder toggle in the folder header (`lb.metro.<id>`,
-  default ON). Clicks (WebAudio osc, lookahead scheduling on the AC
+  default OFF). Clicks (WebAudio osc, lookahead scheduling on the AC
   clock) during recording; with countdown on, a 4-beat count-in replaces
   3-2-1. The FIRST recording of a folder is rounded to whole beats so
   the folder's bar matches the metronome grid.

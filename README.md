@@ -19,12 +19,13 @@ Eine bunte, minimalistische Loop-Box zum Aufnehmen — gebaut für Kinder.
    ein **Vielfaches der ersten Aufnahme** gebracht: Ist sie nur knapp
    (≈1 s) über dem Takt, wird gekürzt — sonst wird auf das nächste
    Vielfache aufgerundet und mit Stille aufgefüllt.
-5. **Export** (Pfeil oben rechts im Ordner): mischt alle Aufnahmen des
-   Ordners (kürzere werden geloopt) und erstellt ein **Video** mit der
-   Ordnerfarbe als Hintergrund — auf dem iPhone lässt es sich über den
-   Teilen-Dialog direkt in **Fotos sichern**.
+5. **Export** (Pfeil oben rechts im Ordner): mischt alle (nicht stummen)
+   Aufnahmen des Ordners — die längste Spur läuft dreimal durch, kürzere
+   loopen entsprechend — und erstellt ein **Video** mit der Ordnerfarbe
+   als Hintergrund. Auf dem iPhone lässt es sich über den Teilen-Dialog
+   direkt in **Fotos sichern**.
 6. **Metronom** (Symbol oben im Ordner): tickt beim Aufnehmen im
-   eingestellten Tempo — bei neuen Ordnern standardmäßig an. Mit
+   eingestellten Tempo — standardmäßig aus, pro Ordner zuschaltbar. Mit
    Countdown gibt es einen 4-Schläge-Einzähler auf dem Beat; die erste
    Aufnahme wird auf ganze Schläge gerundet, damit alles zum Takt passt.
 7. **Stumm schalten**: das Lautsprecher-Symbol im Block nimmt die Spur

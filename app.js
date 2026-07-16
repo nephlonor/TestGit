@@ -12,7 +12,7 @@
  */
 "use strict";
 
-const APP_VERSION = 5; // sichtbar unter Zahnrad → zeigt, welche Version läuft
+const APP_VERSION = 6; // sichtbar unter Zahnrad → zeigt, welche Version läuft
 
 // ---------------------------------------------------------------------------
 // Ordner (feste Farbpalette)
@@ -44,9 +44,9 @@ function saveSettings() {
   localStorage.setItem("lb.bpm", String(settings.bpm));
 }
 
-// Metronom pro Ordner, standardmäßig AN bei neuen Ordnern.
+// Metronom pro Ordner, standardmäßig AUS.
 function metroEnabled(folderId) {
-  return localStorage.getItem("lb.metro." + folderId) !== "0";
+  return localStorage.getItem("lb.metro." + folderId) === "1";
 }
 function setMetroEnabled(folderId, on) {
   localStorage.setItem("lb.metro." + folderId, on ? "1" : "0");
@@ -843,10 +843,11 @@ async function exportFolder() {
 
   try {
     ensureCtx();
-    // 1) Mix rendern: alle nicht stummen Aufnahmen, geloopt auf die längste.
+    // 1) Mix rendern: alle nicht stummen Aufnahmen, geloopt — die längste
+    //    Spur läuft dreimal durch, kürzere füllen entsprechend öfter.
     const bufs = [];
     for (const rec of active) bufs.push(await bufferOf(rec));
-    const durSec = Math.max(...bufs.map((b) => b.duration));
+    const durSec = Math.max(...bufs.map((b) => b.duration)) * 3;
     const sr = AC.sampleRate;
     const off = new OfflineAudioContext(2, Math.ceil(sr * durSec), sr);
     const gain = off.createGain();
