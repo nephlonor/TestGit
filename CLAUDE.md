@@ -10,7 +10,8 @@ held other prototypes; they were fully removed.
 
 ## Concept
 
-- Home screen: 2×4 grid of colour tiles (`FOLDERS` in `app.js`); each tile
+- Home screen: 2×7 grid (7×2 in landscape) of 14 colour tiles (`FOLDERS`
+  in `app.js`; ids are DB keys — never rename, append new ones); each tile
   is a folder. Badge shows the recording count.
 - Inside a folder: numbered recording blocks + a big `+` button that
   starts/stops a recording. While recording, all existing recordings of
@@ -23,8 +24,9 @@ held other prototypes; they were fully removed.
 - Tapping a block plays it — no player UI, just a dot sliding across the
   block; dragging the dot seeks. `×` deletes (two-step confirm).
 - Export (arrow icon in folder header): offline-renders a mix of all
-  non-muted folder recordings (3× the longest track; shorter ones keep
-  looping to fill), then records a
+  non-muted folder recordings (3× the longest track, capped at
+  `MAX_EXPORT_SECONDS` but at least 1× longest; shorter ones keep
+  looping to fill; mono), then records a
   solid-colour canvas + the mix in realtime via MediaRecorder into a
   video (mp4 on Safari, webm elsewhere) and offers `navigator.share`
   (→ iOS Photos) with download fallback.
@@ -48,8 +50,8 @@ sections: folders/settings, IndexedDB (`loopbox` db, `recs` store keyed by
 `id`, indexed by `folder`; blobs stored directly), Web Audio (lazy
 `AudioContext`, decoded-buffer cache), grid view, blocks & playback
 (per-recording player objects in `players` map; rAF loop positions dots),
-recording (raw PCM via AudioWorklet with ScriptProcessor fallback, stored
-as 16-bit mono WAV), export, settings UI.
+recording (raw PCM via AudioWorklet — batched to 2048-sample messages —
+with ScriptProcessor fallback, stored as 16-bit mono WAV), export, settings UI.
 
 ## Gotchas
 
@@ -65,6 +67,23 @@ as 16-bit mono WAV), export, settings UI.
   avoids both; `decodeAudioData` is only used to load WAV blobs from
   IndexedDB, which every browser handles.
 - Recording is capped at `MAX_REC_SECONDS` (safety).
+- iOS AudioContext can be `"interrupted"` (not just `"suspended"`): then
+  there is no sound and the dot doesn't move. `ensureCtx` resumes on any
+  non-running state; if it is still stuck after ~1 s, the next tap closes
+  and recreates the context (`acStuck`).
+- The mic is released after every recording (`releaseMic`): while it is
+  open iOS stays in voice/phone mode and playback is very quiet.
+  `navigator.audioSession.type` (iOS 17+) is `"play-and-record"` while
+  recording and `"playback"` otherwise, so the silent switch doesn't mute.
+- Async starts (`startPlayer`, `startLoopAll`, `startRecording`) re-check a
+  token/generation after every await — otherwise rapid taps or leaving the
+  folder mid-countdown leave orphaned endless loops / a running metronome.
+- Safari drops the IndexedDB connection after backgrounding; `dbReq`
+  reopens it and retries once.
+- WAV blobs are parsed directly into AudioBuffers (`wavToBuffer`);
+  `decodeAudioData` is only the fallback for old non-WAV entries.
+  `bufferCache` holds only the open folder (cleared on close) to keep
+  memory low on iOS.
 - Testing: `python3 -m http.server`; headless Chromium needs
   `--use-fake-ui-for-media-stream --use-fake-device-for-media-stream`
   for mic access. On-device testing needs HTTPS (Pages URL).

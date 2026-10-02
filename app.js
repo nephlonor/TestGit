@@ -7,113 +7,241 @@
  * Ordners als Loop mit — wie eine Loop-Box. Export rendert alle Aufnahmen
  * des Ordners gemischt als Video mit der Ordnerfarbe als Hintergrund.
  *
- * Technik: MediaRecorder (Aufnahme), Web Audio (Wiedergabe/Loops/Mix),
+ * Technik: Web Audio (Aufnahme als rohes PCM → WAV, Wiedergabe/Loops/Mix),
  * IndexedDB (Speicher), Canvas-Stream + MediaRecorder (Video-Export).
  */
 "use strict";
 
-const APP_VERSION = 6; // sichtbar unter Zahnrad → zeigt, welche Version läuft
+const APP_VERSION = 7; // sichtbar unter Zahnrad → zeigt, welche Version läuft
 
 // ---------------------------------------------------------------------------
 // Ordner (feste Farbpalette)
 // ---------------------------------------------------------------------------
+// Die ids sind die Schlüssel der Aufnahmen in der Datenbank — nie umbenennen.
 const FOLDERS = [
-  { id: "coral",  color: "#FF5A5F" },
-  { id: "orange", color: "#FF9F1C" },
-  { id: "yellow", color: "#F7C948" },
-  { id: "green",  color: "#3FA34D" },
-  { id: "teal",   color: "#2EC4B6" },
-  { id: "blue",   color: "#3A86FF" },
-  { id: "purple", color: "#8338EC" },
-  { id: "pink",   color: "#FF5D8F" },
+  { id: "coral",    color: "#FF5A5F" },
+  { id: "orange",   color: "#FF9F1C" },
+  { id: "yellow",   color: "#F7C948" },
+  { id: "green",    color: "#3FA34D" },
+  { id: "teal",     color: "#2EC4B6" },
+  { id: "blue",     color: "#3A86FF" },
+  { id: "purple",   color: "#8338EC" },
+  { id: "pink",     color: "#FF5D8F" },
+  { id: "red",      color: "#D62839" },
+  { id: "lime",     color: "#8AC926" },
+  { id: "sky",      color: "#4CC9F0" },
+  { id: "navy",     color: "#25408F" },
+  { id: "lavender", color: "#B388EB" },
+  { id: "brown",    color: "#A0673C" },
 ];
 
-const MAX_REC_SECONDS = 300; // Sicherheitslimit pro Aufnahme
+const MAX_REC_SECONDS = 300;    // Sicherheitslimit pro Aufnahme
+const MAX_EXPORT_SECONDS = 120; // Export: höchstens so lang (min. 1× längste Spur)
 
 // ---------------------------------------------------------------------------
 // Einstellungen
 // ---------------------------------------------------------------------------
+function lsGet(key) {
+  try { return localStorage.getItem(key); } catch (_) { return null; }
+}
+function lsSet(key, val) {
+  try { localStorage.setItem(key, val); } catch (_) {}
+}
+
 const settings = {
-  countdown: localStorage.getItem("lb.countdown") !== "0",
-  loops: localStorage.getItem("lb.loops") !== "0",
-  bpm: parseInt(localStorage.getItem("lb.bpm") || "90", 10) || 90,
+  countdown: lsGet("lb.countdown") !== "0",
+  loops: lsGet("lb.loops") !== "0",
+  bpm: parseInt(lsGet("lb.bpm") || "90", 10) || 90,
 };
 function saveSettings() {
-  localStorage.setItem("lb.countdown", settings.countdown ? "1" : "0");
-  localStorage.setItem("lb.loops", settings.loops ? "1" : "0");
-  localStorage.setItem("lb.bpm", String(settings.bpm));
+  lsSet("lb.countdown", settings.countdown ? "1" : "0");
+  lsSet("lb.loops", settings.loops ? "1" : "0");
+  lsSet("lb.bpm", String(settings.bpm));
 }
 
 // Metronom pro Ordner, standardmäßig AUS.
 function metroEnabled(folderId) {
-  return localStorage.getItem("lb.metro." + folderId) === "1";
+  return lsGet("lb.metro." + folderId) === "1";
 }
 function setMetroEnabled(folderId, on) {
-  localStorage.setItem("lb.metro." + folderId, on ? "1" : "0");
+  lsSet("lb.metro." + folderId, on ? "1" : "0");
 }
 
 // ---------------------------------------------------------------------------
 // IndexedDB
+//
+// Safari schließt die Verbindung gern, wenn die App eine Weile im
+// Hintergrund war ("Connection to Indexed Database server lost"). Danach
+// schlägt jede Transaktion fehl — deshalb wird die Verbindung bei Bedarf
+// neu geöffnet und jede Anfrage einmal wiederholt.
 // ---------------------------------------------------------------------------
-let db = null;
+let dbPromise = null;
 function openDB() {
   return new Promise((resolve, reject) => {
+    if (!window.indexedDB) { reject(new Error("kein IndexedDB")); return; }
     const req = indexedDB.open("loopbox", 1);
     req.onupgradeneeded = () => {
       const store = req.result.createObjectStore("recs", { keyPath: "id" });
       store.createIndex("folder", "folder");
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const d = req.result;
+      d.onclose = () => { dbPromise = null; };
+      d.onversionchange = () => { d.close(); dbPromise = null; };
+      resolve(d);
+    };
     req.onerror = () => reject(req.error);
   });
 }
+function getDB() {
+  if (!dbPromise) {
+    dbPromise = openDB();
+    dbPromise.catch(() => { dbPromise = null; });
+  }
+  return dbPromise;
+}
+async function dbReq(mode, make) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const d = await getDB();
+      return await new Promise((resolve, reject) => {
+        const tx = d.transaction("recs", mode);
+        const req = make(tx.objectStore("recs"));
+        tx.oncomplete = () => resolve(req.result);
+        tx.onerror = tx.onabort = () => reject(tx.error || req.error);
+      });
+    } catch (err) {
+      if (attempt >= 1) throw err;
+      dbPromise = null; // Verbindung verworfen → beim zweiten Versuch neu öffnen
+    }
+  }
+}
 function dbAll(folder) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction("recs").objectStore("recs").index("folder").getAll(folder);
-    tx.onsuccess = () => resolve(tx.result.sort((a, b) => a.num - b.num));
-    tx.onerror = () => reject(tx.error);
-  });
+  return dbReq("readonly", (s) => s.index("folder").getAll(folder))
+    .then((list) => list.sort((a, b) => a.num - b.num));
 }
 function dbCount(folder) {
-  return new Promise((resolve) => {
-    const tx = db.transaction("recs").objectStore("recs").index("folder").count(folder);
-    tx.onsuccess = () => resolve(tx.result);
-    tx.onerror = () => resolve(0);
-  });
+  return dbReq("readonly", (s) => s.index("folder").count(folder)).catch(() => 0);
 }
 function dbPut(rec) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction("recs", "readwrite").objectStore("recs").put(rec);
-    tx.onsuccess = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
+  return dbReq("readwrite", (s) => s.put(rec));
 }
 function dbDel(id) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction("recs", "readwrite").objectStore("recs").delete(id);
-    tx.onsuccess = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
+  return dbReq("readwrite", (s) => s.delete(id));
 }
 
 // ---------------------------------------------------------------------------
 // Web Audio
 // ---------------------------------------------------------------------------
 let AC = null;
+let acStuck = false; // Kontext ließ sich nicht fortsetzen → beim nächsten Tippen neu anlegen
+
+// iOS 17+: "playback" spielt auch bei eingeschaltetem Stummschalter (sonst
+// ist Web Audio dann lautlos); zum Aufnehmen braucht es "play-and-record".
+function setAudioSession(type) {
+  try {
+    if (navigator.audioSession && navigator.audioSession.type !== type) {
+      navigator.audioSession.type = type;
+    }
+  } catch (_) {}
+}
+
 function ensureCtx() {
-  if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
-  if (AC.state === "suspended") AC.resume();
+  // iOS kennt außer "suspended" auch "interrupted" (z.B. nach Anruf, Siri,
+  // Hintergrund). Dann läuft die Uhr nicht: kein Ton, der Punkt steht still.
+  if (AC && (AC.state === "closed" || (acStuck && !recActive && !starting && !exporting))) {
+    stopAllPlayback();
+    try { AC.close(); } catch (_) {}
+    AC = null;
+    workletReady = null;
+  }
+  acStuck = false;
+  if (!AC) {
+    if (!micStream) setAudioSession("playback");
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    // Stummer Mini-Buffer innerhalb der Nutzergeste entsperrt Audio auf iOS.
+    try {
+      const s = AC.createBufferSource();
+      s.buffer = AC.createBuffer(1, 1, 22050);
+      s.connect(AC.destination);
+      s.start(0);
+    } catch (_) {}
+  }
+  if (AC.state !== "running") {
+    const ctx = AC;
+    try { ctx.resume().catch(() => {}); } catch (_) {}
+    setTimeout(() => {
+      if (AC === ctx && ctx.state !== "running" && !document.hidden) {
+        acStuck = true;
+        toast("Ton hängt — bitte nochmal antippen");
+      }
+    }, 1200);
+  }
   return AC;
 }
-const bufferCache = new Map(); // rec.id -> AudioBuffer
-async function bufferOf(rec) {
-  if (bufferCache.has(rec.id)) return bufferCache.get(rec.id);
-  // Neue Aufnahmen liegen als ArrayBuffer in der DB (robusteste Variante in
-  // Safari); ältere Einträge können noch ein Blob tragen.
-  const raw = rec.data ? rec.data.slice(0) : await rec.blob.arrayBuffer();
-  const buf = await ensureCtx().decodeAudioData(raw);
-  bufferCache.set(rec.id, buf);
-  return buf;
+
+// Gespeicherte Aufnahmen sind unsere eigenen 16-bit-WAVs: direkt in einen
+// AudioBuffer lesen (schnell, kein Resampling, kein Decoder, der versagen
+// kann). Nur Fremdformate (alte MediaRecorder-Einträge) gehen zum Decoder.
+function wavToBuffer(ab) {
+  try {
+    const dv = new DataView(ab);
+    const str = (o, n) => {
+      let s = "";
+      for (let i = 0; i < n; i++) s += String.fromCharCode(dv.getUint8(o + i));
+      return s;
+    };
+    if (dv.byteLength < 44 || str(0, 4) !== "RIFF" || str(8, 4) !== "WAVE") return null;
+    let pos = 12, fmt = null;
+    while (pos + 8 <= dv.byteLength) {
+      const id = str(pos, 4), size = dv.getUint32(pos + 4, true), body = pos + 8;
+      if (id === "fmt ") {
+        fmt = {
+          format: dv.getUint16(body, true),
+          ch: dv.getUint16(body + 2, true),
+          sr: dv.getUint32(body + 4, true),
+          bits: dv.getUint16(body + 14, true),
+        };
+      } else if (id === "data") {
+        if (!fmt || fmt.format !== 1 || fmt.bits !== 16 || !fmt.ch) return null;
+        const step = 2 * fmt.ch;
+        const frames = Math.floor(Math.min(size, dv.byteLength - body) / step);
+        if (!frames) return null;
+        const buf = AC.createBuffer(1, frames, fmt.sr);
+        const out = buf.getChannelData(0);
+        for (let i = 0; i < frames; i++) out[i] = dv.getInt16(body + i * step, true) / 32768;
+        return buf;
+      }
+      pos = body + size + (size & 1);
+    }
+  } catch (_) {}
+  return null;
+}
+
+function decode(ab) {
+  // Callback-Form zusätzlich: ältere Safaris liefern kein Promise zurück.
+  return new Promise((resolve, reject) => {
+    const p = AC.decodeAudioData(ab, resolve, reject);
+    if (p && p.catch) p.catch(reject);
+  });
+}
+
+async function loadBuffer(rec) {
+  const raw = rec.data || await rec.blob.arrayBuffer();
+  return wavToBuffer(raw) || decode(raw.slice(0));
+}
+
+// rec.id -> Promise<AudioBuffer>. Nur der offene Ordner wird gehalten
+// (beim Verlassen geleert) — sonst wächst der Speicher, bis iOS den Tab beendet.
+const bufferCache = new Map();
+function bufferOf(rec) {
+  let p = bufferCache.get(rec.id);
+  if (!p) {
+    p = loadBuffer(rec);
+    bufferCache.set(rec.id, p);
+    p.catch(() => { if (bufferCache.get(rec.id) === p) bufferCache.delete(rec.id); });
+  }
+  return p;
 }
 
 // ---------------------------------------------------------------------------
@@ -143,7 +271,7 @@ function fmtDur(s) {
 // ---------------------------------------------------------------------------
 // Kachelansicht
 // ---------------------------------------------------------------------------
-async function renderGrid() {
+function renderGrid() {
   const grid = $("grid");
   grid.innerHTML = "";
   for (const f of FOLDERS) {
@@ -161,6 +289,7 @@ async function renderGrid() {
 }
 
 async function openFolder(f) {
+  if (currentFolder) return; // Doppeltipp auf die Kachel
   currentFolder = f;
   ensureCtx(); // Nutzergeste: AudioContext hier entsperren
   folderView.style.background = f.color;
@@ -168,18 +297,27 @@ async function openFolder(f) {
   gridView.hidden = true;
   folderView.hidden = false;
   $("metroBtn").classList.toggle("off", !metroEnabled(f.id));
-  recs = await dbAll(f.id);
+  let list = [];
+  try {
+    list = await dbAll(f.id);
+  } catch (_) {
+    toast("Aufnahmen konnten nicht geladen werden");
+  }
+  if (currentFolder !== f) return; // inzwischen wieder zurück
+  recs = list;
   renderBlocks();
 }
 
 function closeFolder() {
+  cancelStart();
   stopAllPlayback();
   if (recActive) stopRecording();
-  if (micStream) {
-    micStream.getTracks().forEach((t) => t.stop()); // Mikrofon-Anzeige aus
-    micStream = null;
-  }
+  releaseMic();
   currentFolder = null;
+  recs = [];
+  blockRefs.clear();
+  blocksEl.innerHTML = "";
+  bufferCache.clear();
   folderView.hidden = true;
   gridView.hidden = false;
   document.querySelector('meta[name="theme-color"]').content = "#f6f4ef";
@@ -191,8 +329,11 @@ function closeFolder() {
 // ---------------------------------------------------------------------------
 // Pro Aufnahme ein Player: { source, startedAt, offset, playing }
 const players = new Map();
+const pending = new Map();   // rec.id -> Token, solange der Buffer noch lädt
+const blockRefs = new Map(); // rec.id -> { el, track, dot }
 
 function renderBlocks() {
+  blockRefs.clear();
   blocksEl.innerHTML = "";
   for (const rec of recs) blocksEl.appendChild(makeBlock(rec));
   blocksEl.scrollTop = blocksEl.scrollHeight;
@@ -243,19 +384,21 @@ function makeBlock(rec) {
   el.appendChild(dur);
   el.appendChild(mute);
   el.appendChild(del);
+  blockRefs.set(rec.id, { el, track, dot });
 
   mute.addEventListener("click", () => setMuted(rec, !rec.muted));
 
   // Antippen: Wiedergabe starten/stoppen. Ziehen am Punkt: spulen.
-  let drag = null;
+  // Kleine Fingerbewegungen (< 8 px) zählen noch als Tippen.
+  let down = false, drag = null;
   track.addEventListener("pointerdown", (e) => {
+    down = true;
     const p = players.get(rec.id);
     if (p && p.playing) {
       // Läuft schon: Griff zum Spulen aufnehmen
-      drag = { moved: false, wasPlaying: true };
+      drag = { moved: false, x: e.clientX };
       pausePlayer(rec);
-      seekTo(rec, e, track);
-      track.setPointerCapture(e.pointerId);
+      try { track.setPointerCapture(e.pointerId); } catch (_) {}
       el.classList.add("scrubbing");
     } else {
       drag = null;
@@ -263,24 +406,28 @@ function makeBlock(rec) {
   });
   track.addEventListener("pointermove", (e) => {
     if (!drag) return;
+    if (!drag.moved && Math.abs(e.clientX - drag.x) < 8) return;
     drag.moved = true;
     seekTo(rec, e, track);
   });
   track.addEventListener("pointerup", (e) => {
     el.classList.remove("scrubbing");
+    if (!down) return;
+    down = false;
     if (drag) {
       // Spul-Geste beendet: weiterspielen — außer es war nur ein Tipp (Stopp)
       if (drag.moved) resumePlayer(rec);
       else stopPlayer(rec);
       drag = null;
     } else {
-      if (loopAll.active) stopLoopAll();
+      if (loopAll.active || loopAll.loading) stopLoopAll();
       startPlayer(rec, 0);
     }
     e.preventDefault();
   });
   track.addEventListener("pointercancel", () => {
     el.classList.remove("scrubbing");
+    down = false;
     if (drag) { resumePlayer(rec); drag = null; }
   });
 
@@ -299,8 +446,18 @@ function makeBlock(rec) {
     clearTimeout(confirmTimer);
     stopPlayer(rec);
     stopLoopAllTrack(rec);
-    await dbDel(rec.id);
+    const ls = loopSources.get(rec.id);
+    if (ls) { try { ls.stop(); } catch (_) {} loopSources.delete(rec.id); }
+    try {
+      await dbDel(rec.id);
+    } catch (_) {
+      toast("Löschen hat nicht geklappt");
+      el.classList.remove("confirm");
+      del.textContent = "×";
+      return;
+    }
     bufferCache.delete(rec.id);
+    blockRefs.delete(rec.id);
     recs = recs.filter((r) => r.id !== rec.id);
     el.remove();
   });
@@ -309,13 +466,29 @@ function makeBlock(rec) {
 }
 
 function blockEl(rec) {
-  return blocksEl.querySelector(`.block[data-id="${rec.id}"]`);
+  const r = blockRefs.get(rec.id);
+  return r ? r.el : null;
 }
 
 async function startPlayer(rec, offset) {
   ensureCtx();
   stopPlayer(rec);
-  const buf = await bufferOf(rec);
+  // Token gegen Doppeltippen: wird während des Ladens erneut getippt oder
+  // gestoppt, startet diese (veraltete) Wiedergabe nicht mehr.
+  const token = {};
+  pending.set(rec.id, token);
+  let buf;
+  try {
+    buf = await bufferOf(rec);
+  } catch (_) {
+    if (pending.get(rec.id) === token) {
+      pending.delete(rec.id);
+      toast("Diese Aufnahme lässt sich nicht abspielen");
+    }
+    return;
+  }
+  if (pending.get(rec.id) !== token) return;
+  pending.delete(rec.id);
   const src = AC.createBufferSource();
   src.buffer = buf;
   src.connect(AC.destination);
@@ -324,12 +497,13 @@ async function startPlayer(rec, offset) {
   src.onended = () => {
     if (players.get(rec.id) === p && p.playing) stopPlayer(rec);
   };
-  src.start(0, offset);
+  src.start(0, Math.min(offset, buf.duration));
   const el = blockEl(rec);
   if (el) el.classList.add("playing");
 }
 
 function stopPlayer(rec) {
+  pending.delete(rec.id);
   const p = players.get(rec.id);
   if (p) {
     p.playing = false;
@@ -337,7 +511,7 @@ function stopPlayer(rec) {
     players.delete(rec.id);
   }
   const el = blockEl(rec);
-  if (el) el.classList.remove("playing");
+  if (el && !loopAll.sources.has(rec.id)) el.classList.remove("playing");
 }
 
 function pausePlayer(rec) {
@@ -366,42 +540,62 @@ function seekTo(rec, e, track) {
 }
 
 function positionDot(rec, frac) {
-  const el = blockEl(rec);
-  if (!el) return;
-  const track = el.querySelector(".track");
-  const dot = el.querySelector(".dot");
-  const w = track.clientWidth - 16;
-  dot.style.left = (8 + frac * w) + "px";
+  const r = blockRefs.get(rec.id);
+  if (!r) return;
+  const w = Math.max(0, r.track.clientWidth - 16);
+  r.dot.style.transform = "translateX(" + (frac * w).toFixed(1) + "px)";
 }
 
 function stopAllPlayback() {
-  for (const rec of recs) stopPlayer(rec);
+  for (const p of players.values()) {
+    p.playing = false;
+    try { p.source.stop(); } catch (_) {}
+  }
   players.clear();
+  pending.clear();
   stopLoopAll();
+  for (const r of blockRefs.values()) r.el.classList.remove("playing");
 }
 
 // --- Alle Spuren gleichzeitig, geloopt (Play-Button neben dem +) ---------
 // Da jede Aufnahme ein Vielfaches der Basis-Länge ist, bleiben alle Spuren
-// beim Loopen automatisch synchron.
-const loopAll = { active: false, sources: new Map(), startedAt: 0 };
+// beim Loopen automatisch synchron. `gen` verhindert, dass ein noch ladender
+// Start nach einem Stopp doch noch losläuft (sonst: Endlos-Loops, die sich
+// nicht mehr stoppen lassen).
+const loopAll = { active: false, loading: false, gen: 0, sources: new Map(), startedAt: 0 };
+
+function loopSource(buf) {
+  const src = AC.createBufferSource();
+  src.buffer = buf;
+  src.loop = true;
+  src.connect(AC.destination);
+  return src;
+}
 
 async function startLoopAll() {
   if (recActive || starting) return;
   if (!recs.length) { toast("Noch keine Aufnahme in diesem Ordner"); return; }
+  if (recs.every((r) => r.muted)) { toast("Alle Spuren sind stummgeschaltet"); return; }
   ensureCtx();
   stopAllPlayback();
+  const gen = ++loopAll.gen;
+  loopAll.loading = true;
+  $("playAllBtn").classList.add("on");
   const list = [];
   for (const rec of recs) {
     if (rec.muted) continue;
     try { list.push([rec, await bufferOf(rec)]); } catch (_) {}
   }
-  if (!list.length) { toast("Alle Spuren sind stummgeschaltet"); return; }
+  if (gen !== loopAll.gen) return; // inzwischen gestoppt
+  loopAll.loading = false;
+  if (!list.length) {
+    $("playAllBtn").classList.remove("on");
+    toast("Die Spuren lassen sich nicht abspielen");
+    return;
+  }
   const t0 = AC.currentTime + 0.06; // gemeinsamer Startpunkt für alle Spuren
   for (const [rec, buf] of list) {
-    const src = AC.createBufferSource();
-    src.buffer = buf;
-    src.loop = true;
-    src.connect(AC.destination);
+    const src = loopSource(buf);
     src.start(t0);
     loopAll.sources.set(rec.id, src);
     const el = blockEl(rec);
@@ -409,20 +603,19 @@ async function startLoopAll() {
   }
   loopAll.active = true;
   loopAll.startedAt = t0;
-  $("playAllBtn").classList.add("on");
 }
 
 function stopLoopAll() {
-  if (!loopAll.active && loopAll.sources.size === 0) return;
+  loopAll.gen++;
+  loopAll.loading = false;
   for (const src of loopAll.sources.values()) {
     try { src.stop(); } catch (_) {}
   }
   loopAll.sources.clear();
   loopAll.active = false;
   $("playAllBtn").classList.remove("on");
-  for (const rec of recs) {
-    const el = blockEl(rec);
-    if (el && !players.has(rec.id)) el.classList.remove("playing");
+  for (const [id, r] of blockRefs) {
+    if (!players.has(id)) r.el.classList.remove("playing");
   }
 }
 
@@ -448,22 +641,19 @@ async function setMuted(rec, muted) {
   // Läuft Play-All: Spur live entfernen bzw. taktgenau wieder einsetzen.
   if (loopAll.active) {
     if (muted) {
-      const src = loopAll.sources.get(rec.id);
-      if (src) { try { src.stop(); } catch (_) {} loopAll.sources.delete(rec.id); }
+      stopLoopAllTrack(rec);
+      if (el) el.classList.remove("playing");
     } else if (!loopAll.sources.has(rec.id)) {
+      const gen = loopAll.gen;
       try {
         const buf = await bufferOf(rec);
-        if (!loopAll.active) return;
-        const src = AC.createBufferSource();
-        src.buffer = buf;
-        src.loop = true;
-        src.connect(AC.destination);
-        src.start(0, Math.max(0, AC.currentTime - loopAll.startedAt) % rec.duration);
+        if (!loopAll.active || gen !== loopAll.gen || rec.muted || loopAll.sources.has(rec.id)) return;
+        const src = loopSource(buf);
+        src.start(0, Math.max(0, AC.currentTime - loopAll.startedAt) % buf.duration);
         loopAll.sources.set(rec.id, src);
         if (el) el.classList.add("playing");
       } catch (_) {}
     }
-    if (muted && el) el.classList.remove("playing");
   }
 
   // Läuft eine Aufnahme: Hintergrund-Loop live entfernen / wieder einsetzen.
@@ -472,14 +662,12 @@ async function setMuted(rec, muted) {
       const src = loopSources.get(rec.id);
       if (src) { try { src.stop(); } catch (_) {} loopSources.delete(rec.id); }
     } else if (settings.loops && !loopSources.has(rec.id)) {
+      const session = recSession;
       try {
         const buf = await bufferOf(rec);
-        if (!recActive) return;
-        const src = AC.createBufferSource();
-        src.buffer = buf;
-        src.loop = true;
-        src.connect(AC.destination);
-        src.start(0, Math.max(0, AC.currentTime - loopStartAC) % rec.duration);
+        if (!recActive || session !== recSession || rec.muted || loopSources.has(rec.id)) return;
+        const src = loopSource(buf);
+        src.start(0, Math.max(0, AC.currentTime - loopStartAC) % buf.duration);
         loopSources.set(rec.id, src);
       } catch (_) {}
     }
@@ -510,6 +698,8 @@ function startMetronome(t0) {
   metro.nextBeat = t0;
   metro.beat = 0;
   const schedule = () => {
+    // Hing die Uhr (Hintergrund), nicht alle verpassten Klicks nachholen.
+    if (metro.nextBeat < AC.currentTime - 0.5) metro.nextBeat = AC.currentTime + 0.05;
     while (metro.nextBeat < AC.currentTime + 0.15) {
       metroClick(metro.nextBeat, metro.beat % 4 === 0);
       metro.beat++;
@@ -528,16 +718,18 @@ function stopMetronome() {
 // Punkt-Animation
 function tick() {
   requestAnimationFrame(tick);
-  if (!currentFolder) return;
+  if (!currentFolder || !AC) return;
+  const now = AC.currentTime;
   for (const rec of recs) {
+    if (!(rec.duration > 0)) continue;
     const p = players.get(rec.id);
+    let frac = -1;
     if (p) {
-      const t = p.playing ? p.offset + (AC.currentTime - p.startedAt) : p.offset;
-      positionDot(rec, Math.max(0, Math.min(1, t / rec.duration)));
+      frac = (p.playing ? p.offset + (now - p.startedAt) : p.offset) / rec.duration;
     } else if (loopAll.active && loopAll.sources.has(rec.id)) {
-      const t = Math.max(0, AC.currentTime - loopAll.startedAt) % rec.duration;
-      positionDot(rec, t / rec.duration);
+      frac = (Math.max(0, now - loopAll.startedAt) % rec.duration) / rec.duration;
     }
+    if (frac >= 0) positionDot(rec, Math.min(1, frac));
   }
 }
 requestAnimationFrame(tick);
@@ -561,20 +753,39 @@ let loopSources = new Map(); // rec.id -> AudioBufferSourceNode
 let loopStartAC = 0;         // AC-Zeitpunkt, an dem Loops + Aufnahme starteten
 let micStream = null;
 let starting = false;
+let recSession = 0;          // erhöht → laufender Start (Countdown) wird abgebrochen
 let workletReady = null;
+const CANCELLED = new Error("abgebrochen");
 
 function loadWorklet() {
   if (!AC.audioWorklet) return Promise.reject(new Error("kein AudioWorklet"));
   if (!workletReady) {
+    // Sammelt 2048 Samples, bevor es sie an den Hauptthread schickt —
+    // eine Nachricht pro 128er-Block wären ~375 pro Sekunde.
     const code = `registerProcessor("lb-rec", class extends AudioWorkletProcessor {
+      constructor() { super(); this.buf = new Float32Array(2048); this.n = 0; }
       process(inputs) {
         const ch = inputs[0] && inputs[0][0];
-        if (ch) this.port.postMessage(ch.slice(0));
+        if (ch) {
+          let i = 0;
+          while (i < ch.length) {
+            const k = Math.min(ch.length - i, this.buf.length - this.n);
+            this.buf.set(ch.subarray(i, i + k), this.n);
+            this.n += k;
+            i += k;
+            if (this.n === this.buf.length) {
+              this.port.postMessage(this.buf, [this.buf.buffer]);
+              this.buf = new Float32Array(2048);
+              this.n = 0;
+            }
+          }
+        }
         return true;
       }
     });`;
     const url = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
     workletReady = AC.audioWorklet.addModule(url);
+    workletReady.catch(() => { workletReady = null; });
   }
   return workletReady;
 }
@@ -604,7 +815,18 @@ function teardownRecGraph() {
   try { if (recNode) recNode.disconnect(); } catch (_) {}
   try { if (recMute) recMute.disconnect(); } catch (_) {}
   if (recNode && recNode.port) recNode.port.onmessage = null;
+  if (recNode && recNode.onaudioprocess) recNode.onaudioprocess = null;
   recNode = recSource = recMute = null;
+}
+
+// Mikrofon nach jeder Aufnahme freigeben: solange es offen ist, schaltet
+// iOS in den Telefonie-Modus — die Wiedergabe wird dann sehr leise.
+function releaseMic() {
+  if (micStream) {
+    micStream.getTracks().forEach((t) => t.stop());
+    micStream = null;
+  }
+  setAudioSession("playback");
 }
 
 function wavBytes(buffer) {
@@ -628,39 +850,58 @@ function wavBytes(buffer) {
   return dv.buffer;
 }
 
-async function runCountdown(labels, stepMs) {
+async function runCountdown(labels, stepMs, alive) {
   const ov = $("countdownOverlay"), num = $("countdownNum");
   ov.hidden = false;
-  for (const n of labels) {
-    num.textContent = n;
-    await new Promise((r) => setTimeout(r, stepMs));
+  try {
+    for (const n of labels) {
+      if (!alive()) return;
+      num.textContent = n;
+      await new Promise((r) => setTimeout(r, stepMs));
+    }
+  } finally {
+    ov.hidden = true;
   }
-  ov.hidden = true;
+}
+
+// Bricht einen Aufnahme-Start ab, der noch im Countdown/Mikrofon-Dialog steckt.
+function cancelStart() {
+  if (!starting) return;
+  recSession++;
+  stopMetronome();
+  $("countdownOverlay").hidden = true;
 }
 
 async function startRecording() {
-  if (recActive || starting) return;
+  if (recActive || starting || !currentFolder) return;
   starting = true;
+  const session = ++recSession;
+  const folder = currentFolder;
+  const check = () => { if (session !== recSession || currentFolder !== folder) throw CANCELLED; };
   try {
     ensureCtx();
     stopAllPlayback();
     if (!micStream || !micStream.active) {
+      setAudioSession("play-and-record");
       micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     }
+    check();
     ensureCtx(); // iOS pausiert den AudioContext gern beim Mikrofonstart
-    const metroOn = metroEnabled(currentFolder.id);
+    const metroOn = metroEnabled(folder.id);
     const beat = 60 / settings.bpm;
+    const alive = () => session === recSession && currentFolder === folder;
 
     if (metroOn) {
       // Metronom läuft ab jetzt; mit Countdown: 4 Schläge Einzähler.
       const t0 = AC.currentTime + 0.15;
       startMetronome(t0);
       if (settings.countdown) {
-        await runCountdown([4, 3, 2, 1], Math.round(beat * 1000));
+        await runCountdown([4, 3, 2, 1], Math.round(beat * 1000), alive);
       }
     } else if (settings.countdown) {
-      await runCountdown([3, 2, 1], 700);
+      await runCountdown([3, 2, 1], 700, alive);
     }
+    check();
 
     // Vorbereitete Buffer, damit die Loops exakt gleichzeitig starten.
     const loopBufs = [];
@@ -672,6 +913,7 @@ async function startRecording() {
     }
 
     recNode = await makeRecNode();
+    check();
     recSource = AC.createMediaStreamSource(micStream);
     recMute = AC.createGain();
     recMute.gain.value = 0; // nicht mithören, nur aufnehmen
@@ -684,10 +926,7 @@ async function startRecording() {
 
     // Alte Aufnahmen als Loop mitlaufen lassen — die Loop-Box.
     for (const [rec, buf] of loopBufs) {
-      const src = AC.createBufferSource();
-      src.buffer = buf;
-      src.loop = true;
-      src.connect(AC.destination);
+      const src = loopSource(buf);
       src.start(loopStartAC);
       loopSources.set(rec.id, src);
     }
@@ -701,10 +940,16 @@ async function startRecording() {
     }, 250);
     recSafetyTimer = setTimeout(stopRecording, MAX_REC_SECONDS * 1000);
   } catch (err) {
-    toast("Mikrofon nicht verfügbar — bitte Zugriff erlauben");
+    if (err !== CANCELLED) {
+      const micErr = err && /NotAllowed|NotFound|NotReadable|Security/.test(err.name || "");
+      toast(micErr ? "Mikrofon nicht verfügbar — bitte Zugriff erlauben"
+                   : "Aufnahme konnte nicht starten — bitte nochmal");
+    }
     stopLoops();
     stopMetronome();
     teardownRecGraph();
+    releaseMic();
+    $("countdownOverlay").hidden = true;
     recActive = false;
     recBtn.classList.remove("recording");
     $("recRow").classList.remove("recording");
@@ -726,10 +971,11 @@ function stopRecording() {
   stopLoops();
   stopMetronome();
   teardownRecGraph();
+  releaseMic();
   recBtn.classList.remove("recording");
   $("recRow").classList.remove("recording");
   recTimer.textContent = "";
-  finishRecording();
+  finishRecording().catch(() => toast("Aufnahme konnte nicht gespeichert werden"));
 }
 
 async function finishRecording() {
@@ -783,7 +1029,7 @@ async function finishRecording() {
     duration: buf.duration,
     createdAt: Date.now(),
   };
-  bufferCache.set(rec.id, buf);
+  bufferCache.set(rec.id, Promise.resolve(buf));
   recs.push(rec);
   blocksEl.appendChild(makeBlock(rec));
   blocksEl.scrollTop = blocksEl.scrollHeight;
@@ -797,18 +1043,29 @@ async function finishRecording() {
 
 recBtn.addEventListener("click", () => {
   if (recActive) stopRecording();
+  else if (starting) cancelStart(); // Tippen im Countdown bricht ab
   else startRecording();
 });
 
 $("playAllBtn").addEventListener("click", () => {
-  if (loopAll.active) stopLoopAll();
+  if (loopAll.active || loopAll.loading) stopLoopAll();
   else startLoopAll();
+});
+
+// App geht in den Hintergrund (Sperrbildschirm, App-Wechsel): iOS hält den
+// AudioContext an — Aufnahme sauber beenden und Wiedergabe stoppen, statt
+// in einem halb kaputten Zustand weiterzumachen.
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) return;
+  if (recActive) stopRecording();
+  stopAllPlayback();
 });
 
 // ---------------------------------------------------------------------------
 // Export: alle Aufnahmen des Ordners gemischt, als Video (Ordnerfarbe)
 // ---------------------------------------------------------------------------
 let exporting = false;
+let exportAbort = null; // bricht den laufenden Export ab
 
 function pickVideoMime() {
   const candidates = [
@@ -823,33 +1080,51 @@ function pickVideoMime() {
   return "";
 }
 
+function closeExport() {
+  $("exportOverlay").hidden = true;
+  exportAbort = null;
+  exporting = false;
+}
+
 async function exportFolder() {
-  if (exporting || recActive) return;
+  if (exporting || recActive || starting) return;
   if (!recs.length) { toast("Noch keine Aufnahme in diesem Ordner"); return; }
   const active = recs.filter((r) => !r.muted);
   if (!active.length) { toast("Alle Spuren sind stummgeschaltet"); return; }
   exporting = true;
   stopAllPlayback();
+  const folder = currentFolder;
   const overlay = $("exportOverlay");
   const bar = overlay.querySelector("#exportProgress > div");
   const state = $("exportState");
   const saveBtn = $("exportSave");
+  const closeBtn = $("exportClose");
   const title = overlay.querySelector("h2");
   overlay.classList.remove("done");
   title.textContent = "Video wird erstellt …";
+  closeBtn.textContent = "Abbrechen";
   bar.style.width = "0%";
   state.textContent = "";
   overlay.hidden = false;
 
+  let cancelled = false;
+  let stopNow = () => {};
+  exportAbort = () => { cancelled = true; overlay.hidden = true; stopNow(); };
+
   try {
     ensureCtx();
     // 1) Mix rendern: alle nicht stummen Aufnahmen, geloopt — die längste
-    //    Spur läuft dreimal durch, kürzere füllen entsprechend öfter.
+    //    Spur läuft dreimal durch (höchstens MAX_EXPORT_SECONDS, aber
+    //    mindestens einmal), kürzere füllen entsprechend öfter. Mono reicht
+    //    (Aufnahmen sind mono) und halbiert den Speicherbedarf.
     const bufs = [];
     for (const rec of active) bufs.push(await bufferOf(rec));
-    const durSec = Math.max(...bufs.map((b) => b.duration)) * 3;
+    if (cancelled) throw CANCELLED;
+    const longest = Math.max(...bufs.map((b) => b.duration));
+    const durSec = Math.min(longest * 3, Math.max(longest, MAX_EXPORT_SECONDS));
     const sr = AC.sampleRate;
-    const off = new OfflineAudioContext(2, Math.ceil(sr * durSec), sr);
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const off = new OAC(1, Math.ceil(sr * durSec), sr);
     const gain = off.createGain();
     gain.gain.value = Math.min(1, 1.6 / Math.sqrt(bufs.length)); // sanfte Summenbegrenzung
     gain.connect(off.destination);
@@ -861,6 +1136,7 @@ async function exportFolder() {
       s.start(0);
     }
     const mixed = await off.startRendering();
+    if (cancelled) throw CANCELLED;
 
     // 2) In Echtzeit als Video aufzeichnen: Canvas in Ordnerfarbe + Mix-Ton.
     const canvas = document.createElement("canvas");
@@ -886,7 +1162,7 @@ async function exportFolder() {
     const t0 = performance.now();
     let raf = 0;
     const draw = () => {
-      cctx.fillStyle = currentFolder.color;
+      cctx.fillStyle = folder.color;
       cctx.fillRect(0, 0, canvas.width, canvas.height);
       const frac = Math.min(1, (performance.now() - t0) / 1000 / durSec);
       bar.style.width = (frac * 100).toFixed(0) + "%";
@@ -896,6 +1172,10 @@ async function exportFolder() {
     };
 
     const done = new Promise((resolve) => { vr.onstop = resolve; });
+    stopNow = () => {
+      try { src.stop(); } catch (_) {}
+      try { vr.stop(); } catch (_) {}
+    };
     vr.start(250);
     src.start();
     draw();
@@ -903,15 +1183,20 @@ async function exportFolder() {
     await done;
     cancelAnimationFrame(raf);
     videoStream.getTracks().forEach((t) => t.stop());
+    dest.stream.getTracks().forEach((t) => t.stop());
+    try { src.disconnect(); } catch (_) {}
+    if (cancelled) throw CANCELLED;
 
     // 3) Sichern: Teilen-Dialog braucht eine frische Nutzergeste → Button.
     const ext = mime.startsWith("video/mp4") ? "mp4" : "webm";
-    const file = new File(vChunks, "loopbox-" + currentFolder.id + "." + ext,
+    const file = new File(vChunks, "loopbox-" + folder.id + "." + ext,
       { type: mime.split(";")[0] });
     bar.style.width = "100%";
     title.textContent = "Video ist fertig!";
     state.textContent = "";
+    closeBtn.textContent = "Schließen";
     overlay.classList.add("done");
+    exportAbort = null;
     saveBtn.onclick = async () => {
       try {
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -923,19 +1208,21 @@ async function exportFolder() {
           a.click();
           setTimeout(() => URL.revokeObjectURL(a.href), 30000);
         }
-        overlay.hidden = true;
+        closeExport();
       } catch (_) { /* Teilen abgebrochen — Dialog offen lassen */ }
-      exporting = false;
     };
-    return; // overlay bleibt bis "Video sichern" offen
+    // Overlay bleibt bis "Video sichern" oder "Schließen" offen.
   } catch (err) {
-    toast("Export hat nicht geklappt");
-    overlay.hidden = true;
-    exporting = false;
+    if (err !== CANCELLED) toast("Export hat nicht geklappt");
+    closeExport();
   }
 }
 
 $("exportBtn").addEventListener("click", exportFolder);
+$("exportClose").addEventListener("click", () => {
+  if (exportAbort) exportAbort(); // läuft noch → abbrechen (schließt sich selbst)
+  else closeExport();
+});
 
 // ---------------------------------------------------------------------------
 // Einstellungen-UI
@@ -966,6 +1253,7 @@ $("bpmUp").addEventListener("click", () => {
   syncSwitches();
 });
 $("metroBtn").addEventListener("click", () => {
+  if (!currentFolder) return;
   const on = !metroEnabled(currentFolder.id);
   setMetroEnabled(currentFolder.id, on);
   $("metroBtn").classList.toggle("off", !on);
@@ -984,7 +1272,4 @@ $("backBtn").addEventListener("click", closeFolder);
 // ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
-(async function init() {
-  db = await openDB();
-  renderGrid();
-})();
+renderGrid(); // Kacheln sofort zeigen — die Zähler kommen nach, sobald die DB offen ist

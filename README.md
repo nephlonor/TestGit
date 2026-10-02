@@ -4,7 +4,7 @@ Eine bunte, minimalistische Loop-Box zum Aufnehmen — gebaut für Kinder.
 
 ## So funktioniert's
 
-1. **Farbe antippen** — jede Farbkachel ist ein Ordner.
+1. **Farbe antippen** — jede der 14 Farbkacheln ist ein Ordner.
 2. **Großes + drücken** — die Aufnahme startet (auf Wunsch mit 3‑2‑1‑Countdown).
    Nochmal drücken stoppt sie.
 3. Die Aufnahme erscheint als **nummerierter Block**. Antippen spielt sie ab:
@@ -20,10 +20,11 @@ Eine bunte, minimalistische Loop-Box zum Aufnehmen — gebaut für Kinder.
    (≈1 s) über dem Takt, wird gekürzt — sonst wird auf das nächste
    Vielfache aufgerundet und mit Stille aufgefüllt.
 5. **Export** (Pfeil oben rechts im Ordner): mischt alle (nicht stummen)
-   Aufnahmen des Ordners — die längste Spur läuft dreimal durch, kürzere
-   loopen entsprechend — und erstellt ein **Video** mit der Ordnerfarbe
+   Aufnahmen des Ordners — die längste Spur läuft dreimal durch (höchstens
+   2 Minuten, aber mindestens einmal), kürzere loopen entsprechend — und
+   erstellt ein **Video** mit der Ordnerfarbe
    als Hintergrund. Auf dem iPhone lässt es sich über den Teilen-Dialog
-   direkt in **Fotos sichern**.
+   direkt in **Fotos sichern**. „Abbrechen" stoppt den Export jederzeit.
 6. **Metronom** (Symbol oben im Ordner): tickt beim Aufnehmen im
    eingestellten Tempo — standardmäßig aus, pro Ordner zuschaltbar. Mit
    Countdown gibt es einen 4-Schläge-Einzähler auf dem Beat; die erste
